@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: ben-ten
+    runtime: node
+    plan: free
+    buildCommand: cd server && npm install
+    startCommand: node server/index.js

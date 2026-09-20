@@ -2,6 +2,8 @@ import * as THREE from "three";
 
 // ---------- Card rendering helpers ----------
 const RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+const CARD_FONT = '"Fredoka", "Arial Black", sans-serif';
+document.fonts.load(`700 60px ${CARD_FONT}`); // kick off webfont load before any card is drawn
 
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -13,39 +15,46 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
+// Balatro-ish flat colors: vivid red for hearts/diamonds, ink-navy for clubs/spades
+const CARD_INK = "#15121f";
+const CARD_RED = "#ff5d5d";
+
 const faceTextureCache = new Map();
 function faceTexture(card) {
   const key = card.rank + card.suit;
   if (faceTextureCache.has(key)) return faceTextureCache.get(key);
+  const color = card.color === "#c0392b" ? CARD_RED : CARD_INK;
   const canvas = document.createElement("canvas");
   canvas.width = 256; canvas.height = 358;
   const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#fdfaf3";
-  roundRect(ctx, 4, 4, 248, 350, 18);
+
+  ctx.fillStyle = "#f7f1e3";
+  roundRect(ctx, 6, 6, 244, 346, 22);
   ctx.fill();
-  ctx.strokeStyle = "#c9c2ae";
-  ctx.lineWidth = 4;
-  roundRect(ctx, 4, 4, 248, 350, 18);
+  ctx.strokeStyle = CARD_INK;
+  ctx.lineWidth = 9;
+  roundRect(ctx, 6, 6, 244, 346, 22);
   ctx.stroke();
 
-  ctx.fillStyle = card.color;
-  ctx.font = "bold 44px Georgia";
+  ctx.fillStyle = color;
+  ctx.font = `700 46px ${CARD_FONT}`;
   ctx.textBaseline = "top";
-  ctx.fillText(card.rank, 20, 16);
-  ctx.font = "40px Georgia";
-  ctx.fillText(card.symbol, 20, 66);
+  ctx.fillText(card.rank, 22, 18);
+  ctx.font = `44px ${CARD_FONT}`;
+  ctx.fillText(card.symbol, 22, 68);
 
   ctx.save();
-  ctx.translate(236, 342);
+  ctx.translate(234, 340);
   ctx.rotate(Math.PI);
-  ctx.font = "bold 44px Georgia";
+  ctx.font = `700 46px ${CARD_FONT}`;
   ctx.textBaseline = "top";
   ctx.fillText(card.rank, 0, 0);
-  ctx.font = "40px Georgia";
-  ctx.fillText(card.symbol, 0, 50);
+  ctx.font = `44px ${CARD_FONT}`;
+  ctx.fillText(card.symbol, 0, 52);
   ctx.restore();
 
-  ctx.font = "110px Georgia";
+  ctx.fillStyle = color;
+  ctx.font = "120px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(card.symbol, 128, 190);
@@ -62,21 +71,43 @@ function getBackTexture() {
   const canvas = document.createElement("canvas");
   canvas.width = 256; canvas.height = 358;
   const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#1e3a5f";
-  roundRect(ctx, 4, 4, 248, 350, 18);
+
+  ctx.fillStyle = "#241f38";
+  roundRect(ctx, 6, 6, 244, 346, 22);
   ctx.fill();
-  ctx.strokeStyle = "#d4af37";
-  ctx.lineWidth = 6;
-  roundRect(ctx, 14, 14, 228, 330, 14);
+  ctx.strokeStyle = CARD_INK;
+  ctx.lineWidth = 9;
+  roundRect(ctx, 6, 6, 244, 346, 22);
   ctx.stroke();
-  ctx.fillStyle = "#d4af37";
-  ctx.font = "bold 30px Georgia";
+  ctx.strokeStyle = "#ffcd3c";
+  ctx.lineWidth = 5;
+  roundRect(ctx, 20, 20, 216, 318, 16);
+  ctx.stroke();
+
+  // diamond lattice, Balatro-card-back style
+  ctx.strokeStyle = "rgba(255, 205, 60, 0.35)";
+  ctx.lineWidth = 2;
+  for (let x = -358; x < 256 + 358; x += 36) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + 358, 358);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, 358);
+    ctx.lineTo(x + 358, 0);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = "#ffcd3c";
+  ctx.beginPath();
+  ctx.ellipse(128, 179, 78, 46, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#241f38";
+  ctx.font = `700 30px ${CARD_FONT}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.save();
-  ctx.translate(128, 179);
-  ctx.fillText("BEN 10", 0, 0);
-  ctx.restore();
+  ctx.fillText("BEN 10", 128, 181);
+
   backTexture = new THREE.CanvasTexture(canvas);
   backTexture.colorSpace = THREE.SRGBColorSpace;
   return backTexture;
@@ -97,14 +128,18 @@ function makeLabelSprite(text) {
   const canvas = document.createElement("canvas");
   canvas.width = 256; canvas.height = 64;
   const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "rgba(20,38,26,0.85)";
-  roundRect(ctx, 0, 0, 256, 64, 16);
+  ctx.fillStyle = "#211c33";
+  roundRect(ctx, 2, 2, 252, 60, 16);
   ctx.fill();
-  ctx.fillStyle = "#f1efe9";
-  ctx.font = "bold 30px sans-serif";
+  ctx.strokeStyle = "#ffcd3c";
+  ctx.lineWidth = 4;
+  roundRect(ctx, 2, 2, 252, 60, 16);
+  ctx.stroke();
+  ctx.fillStyle = "#fdf6e8";
+  ctx.font = `700 28px ${CARD_FONT}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(text, 128, 32);
+  ctx.fillText(text, 128, 33);
   const tex = new THREE.CanvasTexture(canvas);
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex }));
   sprite.scale.set(1.4, 0.35, 1);
@@ -116,22 +151,39 @@ const canvas = document.getElementById("scene");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0b3d1e);
+scene.background = new THREE.Color(0x15121f);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.set(0, 7.2, 8.4);
 camera.lookAt(0, 0, -0.3);
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.9));
-const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+scene.add(new THREE.AmbientLight(0xffffff, 0.95));
+const dirLight = new THREE.DirectionalLight(0xfff2d0, 0.55);
 dirLight.position.set(3, 8, 5);
 scene.add(dirLight);
 
-const table = new THREE.Mesh(new THREE.CircleGeometry(6.2, 48), new THREE.MeshStandardMaterial({ color: 0x0e5c2e }));
+function makeTableTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512; canvas.height = 512;
+  const ctx = canvas.getContext("2d");
+  const grad = ctx.createRadialGradient(256, 256, 40, 256, 256, 256);
+  grad.addColorStop(0, "#2e2748");
+  grad.addColorStop(1, "#1c1830");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 512, 512);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const table = new THREE.Mesh(
+  new THREE.CircleGeometry(6.2, 48),
+  new THREE.MeshStandardMaterial({ map: makeTableTexture() })
+);
 table.rotation.x = -Math.PI / 2;
 scene.add(table);
 
-const rim = new THREE.Mesh(new THREE.RingGeometry(6.2, 6.5, 48), new THREE.MeshStandardMaterial({ color: 0x5a3a1e }));
+const rim = new THREE.Mesh(new THREE.RingGeometry(6.2, 6.55, 48), new THREE.MeshStandardMaterial({ color: 0xffcd3c }));
 rim.rotation.x = -Math.PI / 2;
 rim.position.y = -0.01;
 scene.add(rim);

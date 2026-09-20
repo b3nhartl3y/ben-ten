@@ -397,10 +397,12 @@ function renderTable() {
         mesh.position.set(seat.x + localX * Math.cos(seat.angle), 0.05 + i * 0.002, seat.z + localX * Math.sin(seat.angle));
         mesh.rotation.x = -Math.PI / 2;
         mesh.rotation.z = seat.angle;
+        mesh.userData.opponentId = p.id;
         handGroup.add(mesh);
       }
       const label = makeLabelSprite(p.name + (p.connected ? "" : " (away)"));
       label.position.set(seat.x * 1.18, 0.6, seat.z * 1.18);
+      label.userData.opponentId = p.id;
       handGroup.add(label);
     }
   });
@@ -453,7 +455,13 @@ function showHint(text) {
   hint.textContent = text;
 }
 
+// What clicking a player's cards/name does right now: null (nothing armed),
+// "take" (draw phase — take a card from whoever is clicked), "count" (ask
+// their total), or "card" (ask if they hold a chosen rank).
+let armedAction = null;
+
 function renderActionPanel(isMyTurn) {
+  armedAction = null;
   if (latest.phase === "over") { setActionPanel([]); showHint(""); return; }
   if (!isMyTurn) { setActionPanel([]); showHint(""); return; }
 
@@ -461,80 +469,100 @@ function renderActionPanel(isMyTurn) {
     setActionPanel([]);
     showHint("Click one of your cards to discard it.");
   } else if (latest.phase === "extra") {
-    showHint("Optional: ask a question before you draw.");
-    setActionPanel([
-      { label: "Ask for a card", onClick: openAskCardMenu },
-      { label: "Ask for a count", onClick: openAskCountMenu },
-      { label: "Skip", gold: true, onClick: () => send({ type: "skipAsk" }) },
-    ]);
+    showExtraDefault();
   } else if (latest.phase === "draw") {
-    showHint("Click the draw pile, or take a card from an opponent below.");
-    const buttons = opponents().map((o) => ({
-      label: `Take from ${o.name} (${o.count})`,
-      onClick: () => send({ type: "drawFromPlayer", targetId: o.id }),
-    }));
-    buttons.push({ label: "Draw from pile", gold: true, onClick: () => send({ type: "drawPile" }) });
-    setActionPanel(buttons);
+    armedAction = { type: "take" };
+    showHint("Click an opponent to take a card, or the draw pile to draw.");
+    setActionPanel([{ label: "Draw from pile", gold: true, onClick: () => send({ type: "drawPile" }) }]);
   }
 }
 
-function openAskCardMenu() {
+function showExtraDefault() {
+  armedAction = null;
+  showHint("Optional: ask a question before you draw.");
+  setActionPanel([
+    { label: "Ask for a card", onClick: armAskCard },
+    { label: "Ask for a count", onClick: armAskCount },
+    { label: "Skip", gold: true, onClick: () => send({ type: "skipAsk" }) },
+  ]);
+}
+
+function armAskCount() {
+  armedAction = { type: "count" };
+  showHint("Click a player to ask their count.");
+  setActionPanel([{ label: "Cancel", onClick: showExtraDefault }]);
+}
+
+function armAskCard() {
   const panel = $("action-panel");
   panel.innerHTML = "";
-  const oppSel = document.createElement("select");
-  opponents().forEach((o) => {
-    const opt = document.createElement("option");
-    opt.value = o.id; opt.textContent = o.name;
-    oppSel.appendChild(opt);
-  });
   const rankSel = document.createElement("select");
   RANKS.forEach((r) => {
     const opt = document.createElement("option");
     opt.value = r; opt.textContent = r;
     rankSel.appendChild(opt);
   });
-  const askBtn = document.createElement("button");
-  askBtn.className = "action-btn gold";
-  askBtn.textContent = "Ask";
-  askBtn.addEventListener("click", () => send({ type: "askCard", targetId: oppSel.value, rank: rankSel.value }));
-  panel.append(oppSel, rankSel, askBtn);
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className = "action-btn";
+  cancelBtn.textContent = "Cancel";
+  cancelBtn.addEventListener("click", showExtraDefault);
+  panel.append(rankSel, cancelBtn);
+  armedAction = { type: "card", getRank: () => rankSel.value };
+  showHint("Pick a rank, then click a player to ask.");
 }
 
-function openAskCountMenu() {
-  const panel = $("action-panel");
-  panel.innerHTML = "";
-  const oppSel = document.createElement("select");
-  opponents().forEach((o) => {
-    const opt = document.createElement("option");
-    opt.value = o.id; opt.textContent = o.name;
-    oppSel.appendChild(opt);
-  });
-  const askBtn = document.createElement("button");
-  askBtn.className = "action-btn gold";
-  askBtn.textContent = "Ask count";
-  askBtn.addEventListener("click", () => send({ type: "askCount", targetId: oppSel.value }));
-  panel.append(oppSel, askBtn);
-}
-
-// ---------- Interaction: click own hand to discard ----------
+// ---------- Interaction: click own hand to discard, an opponent to act on them, or the pile to draw ----------
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 
 canvas.addEventListener("click", (e) => {
-  if (!latest || latest.phase !== "discard" || latest.currentPlayerId !== myId) return;
+  if (!latest || latest.currentPlayerId !== myId) return;
   pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
   pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
-  const myMeshes = handGroup.children.filter((m) => m.userData.myCard);
-  const hits = raycaster.intersectObjects(myMeshes, true);
-  if (hits.length) {
-    const group = findCardGroup(hits[0].object);
-    if (group) send({ type: "discard", cardId: group.userData.card.id });
+
+  if (latest.phase === "discard") {
+    const myMeshes = handGroup.children.filter((m) => m.userData.myCard);
+    const hits = raycaster.intersectObjects(myMeshes, true);
+    if (hits.length) {
+      const group = findTagged(hits[0].object, "card");
+      if (group) send({ type: "discard", cardId: group.userData.card.id });
+    }
+    return;
+  }
+
+  if (armedAction && (latest.phase === "extra" || latest.phase === "draw")) {
+    const opponentMeshes = handGroup.children.filter((m) => m.userData.opponentId !== undefined);
+    const hits = raycaster.intersectObjects(opponentMeshes, true);
+    if (hits.length) {
+      const target = findTagged(hits[0].object, "opponentId");
+      if (target) actOnPlayer(target.userData.opponentId);
+      return;
+    }
+  }
+
+  if (armedAction?.type === "take" && latest.phase === "draw") {
+    const pileHits = raycaster.intersectObjects(pileGroup.children, true);
+    if (pileHits.length) {
+      const obj = pileHits[0].object;
+      const worldPos = new THREE.Vector3();
+      obj.getWorldPosition(worldPos);
+      if (worldPos.x < 0) send({ type: "drawPile" });
+    }
   }
 });
 
-function findCardGroup(obj) {
+function actOnPlayer(targetId) {
+  if (!armedAction) return;
+  if (armedAction.type === "take") send({ type: "drawFromPlayer", targetId });
+  else if (armedAction.type === "count") send({ type: "askCount", targetId });
+  else if (armedAction.type === "card") send({ type: "askCard", targetId, rank: armedAction.getRank() });
+}
+
+function findTagged(obj, key) {
   let o = obj;
-  while (o && !(o.userData && o.userData.card !== undefined) && o.parent) o = o.parent;
-  return o && o.userData && o.userData.card !== undefined ? o : null;
+  while (o && (!o.userData || o.userData[key === "card" ? "card" : key] === undefined) && o.parent) o = o.parent;
+  if (!o || !o.userData) return null;
+  const val = key === "card" ? o.userData.card : o.userData[key];
+  return val !== undefined ? o : null;
 }

@@ -1,7 +1,4 @@
 import * as THREE from "three";
-import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
-import { RenderPixelatedPass } from "three/addons/postprocessing/RenderPixelatedPass.js";
-import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 
 // ---------- Card art ----------
 const RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
@@ -140,7 +137,7 @@ function makeCardGroup(card) {
 
 // ---------- Scene ----------
 const canvas = document.getElementById("scene");
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 const scene = new THREE.Scene();
 
@@ -186,19 +183,16 @@ const bgMat = new THREE.ShaderMaterial({
       float light = (LIGHTING - 0.2) * max(c1p * 5.0 - 4.0, 0.0) + LIGHTING * max(c2p * 5.0 - 4.0, 0.0);
       vec4 col = (0.3 / CONTRAST) * C1 + (1.0 - 0.3 / CONTRAST) * (C1 * c1p + C2 * c2p + vec4(c3p * C3.rgb, c3p)) + light;
       // dim + slight desaturate so cards pop off it
-      vec3 rgb = col.rgb * 0.68;
+      vec3 rgb = col.rgb * 0.95;
       float g = dot(rgb, vec3(0.299, 0.587, 0.114));
-      gl_FragColor = vec4(mix(vec3(g), rgb, 0.85), 1.0);
+      gl_FragColor = vec4(mix(vec3(g), rgb, 0.9), 1.0);
     }`,
 });
 const bg = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bgMat);
 bg.position.z = -5;
 scene.add(bg);
 
-const composer = new EffectComposer(renderer);
-const pixelPass = new RenderPixelatedPass(2, scene, camera, { normalEdgeStrength: 0, depthEdgeStrength: 0.35 });
-composer.addPass(pixelPass);
-composer.addPass(new OutputPass());
+// ponytail: no pixel post-pass — the swirl shader pixelates itself, cards stay crisp
 
 // View: always at least 12 units wide and 10 tall; layout is derived from the half-extents.
 let halfW = 6, halfH = 5, portrait = false;
@@ -212,7 +206,6 @@ function resize() {
   bg.scale.set(halfW * 2, halfH * 2, 1);
   bgMat.uniforms.uRes.value.set(w, h);
   renderer.setSize(w, h);
-  composer.setSize(w, h);
   if (latest && latest.phase !== "lobby") renderTable(latest.currentPlayerId === myId);
 }
 window.addEventListener("resize", resize);
@@ -272,7 +265,7 @@ function animate() {
       cards.delete(key);
     }
   }
-  composer.render();
+  renderer.render(scene, camera);
   syncLabels();
 }
 

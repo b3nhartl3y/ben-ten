@@ -122,11 +122,23 @@ function getBackTexture() {
 const CARD_W = 1.5, CARD_H = 2.1;
 const cardGeo = new THREE.PlaneGeometry(CARD_W, CARD_H);
 const shadowGeo = new THREE.PlaneGeometry(CARD_W * 1.02, CARD_H * 1.02);
-const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false });
+let shadowTexture = null;
+function getShadowTexture() {
+  if (shadowTexture) return shadowTexture;
+  const canvas = newCardCanvas();
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#000";
+  roundRect(ctx, 6, 6, 244, 346, 20);
+  ctx.fill();
+  shadowTexture = new THREE.CanvasTexture(canvas);
+  return shadowTexture;
+}
+const shadowMat = new THREE.MeshBasicMaterial({ map: getShadowTexture(), transparent: true, opacity: 0.35, depthWrite: false });
 
 function makeCardGroup(card) {
   const group = new THREE.Group();
-  const mat = new THREE.MeshBasicMaterial({ map: card ? faceTexture(card) : getBackTexture() });
+  // transparent so the canvas alpha outside the rounded rect shows the background through
+  const mat = new THREE.MeshBasicMaterial({ map: card ? faceTexture(card) : getBackTexture(), transparent: true, alphaTest: 0.5 });
   const face = new THREE.Mesh(cardGeo, mat);
   const shadow = new THREE.Mesh(shadowGeo, shadowMat);
   shadow.position.set(0.09, -0.11, -0.02);

@@ -291,8 +291,10 @@ function spawnCard(key, card, from) {
   return entry;
 }
 
-function deckPos() { return { x: -1.25, y: portrait ? 1.2 : 0.85 }; }
-function discardPos() { return { x: 1.25, y: portrait ? 1.2 : 0.85 }; }
+// Portrait rows are fractions of the view height so phones and tablets both space out evenly.
+function centreY() { return portrait ? halfH - 0.44 * (2 * halfH) : 0.85; }
+function deckPos() { return { x: -1.25, y: centreY() }; }
+function discardPos() { return { x: 1.25, y: centreY() }; }
 
 function animate() {
   requestAnimationFrame(animate);
@@ -604,7 +606,9 @@ function renderTable(isMyTurn) {
 
   // --- my hand ---
   const hand = latest.you.hand;
-  const handY = -halfH + (portrait ? 5.1 : 2.95);
+  // portrait: sit the hand in the bottom quarter, but never closer than ~185px to the edge (room for the dock)
+  const unitsPerPx = (2 * halfH) / window.innerHeight;
+  const handY = -halfH + (portrait ? Math.max(0.24 * (2 * halfH), 185 * unitsPerPx + CARD_H / 2) : 2.95);
   const spacing = Math.min(1.65, (halfW * 2 - 1.2 - CARD_W) / Math.max(hand.length - 1, 1));
   const startX = -((hand.length - 1) * spacing) / 2;
   hand.forEach((card, i) => {
@@ -676,7 +680,7 @@ function renderTable(isMyTurn) {
 }
 
 function oppPos(idx, n) {
-  const y = halfH - (portrait ? 3.1 : 2.1);
+  const y = portrait ? halfH - 0.2 * (2 * halfH) : halfH - 2.1;
   const span = Math.min(halfW * 2 - (portrait ? 2.2 : 3.2), 3.2 * (n - 1));
   const x = n === 1 ? 0 : -span / 2 + (span / (n - 1)) * idx;
   return { x, y };

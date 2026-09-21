@@ -409,6 +409,36 @@ function showWaitingRoom(code) {
   $("setup-screen").classList.add("hidden");
   $("waiting-screen").classList.remove("hidden");
   $("room-code-display").textContent = code;
+  $("chat").classList.remove("hidden");
+}
+
+// Log entries are strings (game events) or {chat, from, text}. Re-render when the tail changes.
+let renderedLogKey = "";
+function renderLog() {
+  const key = latest.log.length + ":" + JSON.stringify(latest.log[latest.log.length - 1] || "");
+  if (key === renderedLogKey) return;
+  const prevLen = renderedLogKey ? parseInt(renderedLogKey, 10) : latest.log.length;
+  renderedLogKey = key;
+  const el = $("log");
+  el.innerHTML = "";
+  for (const m of latest.log) {
+    const d = document.createElement("div");
+    if (m && m.chat) {
+      d.className = "chat-line" + (m.from === myName ? " me" : "");
+      const b = document.createElement("b");
+      b.textContent = m.from + ": ";
+      d.append(b, m.text);
+    } else d.textContent = m;
+    el.appendChild(d);
+  }
+  el.scrollTop = el.scrollHeight;
+  const newChats = latest.log.slice(prevLen).filter((m) => m && m.chat && m.from !== myName).length;
+  if (newChats && chatCollapsed()) {
+    unread += newChats;
+    const badge = $("chat-unread");
+    badge.textContent = unread;
+    badge.classList.remove("hidden");
+  }
 }
 
 let chosenHandSize = 4;
@@ -424,23 +454,16 @@ $("start-btn").addEventListener("click", () => send({ type: "start", handSize: c
 $("restart-btn").addEventListener("click", () => location.reload());
 
 // ---------- Render ----------
-let renderedLogCount = 0;
 let renderedPlayerCount = -1;
 
 function render() {
   if (!latest) return;
-  if (latest.phase === "lobby") { renderLobby(); return; }
+  if (latest.phase === "lobby") { renderLobby(); renderLog(); return; }
 
   $("waiting-screen").classList.add("hidden");
   $("hud").classList.remove("hidden");
 
-  if (latest.log.length !== renderedLogCount) {
-    const el = $("log");
-    el.innerHTML = "";
-    latest.log.forEach((m) => { const d = document.createElement("div"); d.textContent = m; el.appendChild(d); });
-    el.scrollTop = el.scrollHeight;
-    renderedLogCount = latest.log.length;
-  }
+  renderLog();
 
   const isMyTurn = latest.currentPlayerId === myId;
   const current = latest.players.find((p) => p.id === latest.currentPlayerId);
@@ -547,8 +570,8 @@ function renderTable(isMyTurn) {
     e.target = { x: d.x + i * 0.02, y: d.y + i * 0.03, z: i * 0.01, rot: 0, scale: 0.85 };
     seen.add(key);
   }
-  const deckClickable = isMyTurn && latest.phase === "draw";
-  label("deck", `Draw · ${latest.drawCount}`, d.x, d.y - CARD_H * 0.85 / 2 - 0.45, deckClickable ? "clickable green" : "", deckClickable ? () => send({ type: "drawPile" }) : null);
+  const deckClickable = isMyTurn && (latest.phase === "draw" || latest.phase === "extra");
+  label("deck", `Draw · ${latest.drawCount}`, d.x, d.y - CARD_H * 0.85 / 2 - 0.45, deckClickable ? "clickable green" : "", deckClickable ? drawFromPile : null);
 
   // --- discard pile ---
   const top = latest.discardTop;
@@ -594,19 +617,19 @@ function showHint(text) { document.querySelector(".hint").textContent = text; }
 
 function renderActionPanel(isMyTurn) {
   if (latest.phase === "over" || !isMyTurn) { setActionPanel([]); showHint(""); return; }
-  if (latest.phase === "discard") {
-    setActionPanel([]);
-    showHint("Tap one of your cards to discard it.");
-  } else if (latest.phase === "extra") {
-    showExtraDefault();
-  } else if (latest.phase === "draw") {
-    showHint("Tap a player to take a random card from them, or tap the draw pile.");
-    setActionPanel([{ label: "Draw from pile", color: "green", onClick: () => send({ type: "drawPile" }) }]);
-  }
+  setActionPanel([]);
+  if (latest.phase === "discard") showHint("Tap one of your cards to discard it.");
+  else if (latest.phase === "extra") showExtraDefault();
+  else if (latest.phase === "draw") showHint("Tap a player to take a random card, or tap the draw pile.");
 }
+// ponytail: no Skip button — the optional ask is skipped implicitly by taking or drawing
 function showExtraDefault() {
-  showHint("Tap a player to ask them something, or skip.");
-  setActionPanel([{ label: "Skip", color: "gold", onClick: () => send({ type: "skipAsk" }) }]);
+  showHint("Tap a player to ask or take, or tap the draw pile.");
+  setActionPanel([]);
+}
+function drawFromPile() {
+  if (latest.phase === "extra") send({ type: "skipAsk" }); // synchronous on the server, so the draw lands in the same tick
+  send({ type: "drawPile" });
 }
 function onOpponentClick(targetId) {
   if (!latest || latest.currentPlayerId !== myId) return;
@@ -665,7 +688,7 @@ function hoverable(e) {
   if (e.tag.myCard) return true;
   if (latest.currentPlayerId !== myId) return false;
   if (e.tag.opponentId && (latest.phase === "extra" || latest.phase === "draw")) return true;
-  if (e.tag.deck && latest.phase === "draw") return true;
+  if (e.tag.deck && (latest.phase === "draw" || latest.phase === "extra")) return true;
   return false;
 }
 
@@ -682,7 +705,24 @@ canvas.addEventListener("click", (ev) => {
   if (!e) return;
   if (latest.phase === "discard" && e.tag.myCard) send({ type: "discard", cardId: e.tag.cardId });
   else if (e.tag.opponentId) onOpponentClick(e.tag.opponentId);
-  else if (e.tag.deck && latest.phase === "draw") send({ type: "drawPile" });
+  else if (e.tag.deck && (latest.phase === "draw" || latest.phase === "extra")) drawFromPile();
+});
+
+// ---------- Chat ----------
+const chatEl = $("chat");
+let unread = 0;
+function chatCollapsed() { return getComputedStyle($("chat-panel")).display === "none"; }
+$("chat-toggle").addEventListener("click", () => {
+  chatEl.classList.toggle("open");
+  if (!chatCollapsed()) { unread = 0; $("chat-unread").classList.add("hidden"); $("log").scrollTop = $("log").scrollHeight; }
+});
+$("chat-form").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const input = $("chat-input");
+  const text = input.value.trim();
+  if (!text) return;
+  send({ type: "chat", text });
+  input.value = "";
 });
 
 resize();

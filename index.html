@@ -67,9 +67,19 @@
 
 <div id="labels"></div>
 
+<div id="chat" class="hidden">
+  <button id="chat-toggle" type="button" aria-label="Chat">💬<span id="chat-unread" class="hidden"></span></button>
+  <div id="chat-panel">
+    <div id="log"></div>
+    <form id="chat-form" autocomplete="off">
+      <input id="chat-input" type="text" maxlength="200" placeholder="Say something…" />
+      <button type="submit" class="action-btn gold">Send</button>
+    </form>
+  </div>
+</div>
+
 <div id="hud" class="hidden">
   <div id="turn-indicator"></div>
-  <div id="log"></div>
   <div id="bottom-dock">
     <div class="hint"></div>
     <div id="action-panel"></div>

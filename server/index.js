@@ -114,7 +114,7 @@ function broadcast(room) {
       })),
       discardTop: room.discardPile.length ? room.discardPile[room.discardPile.length - 1] : null,
       drawCount: room.drawPile.length,
-      log: room.log.slice(-12),
+      log: room.log.slice(-40),
       winnerId: room.winnerId,
     };
     p.ws.send(JSON.stringify(payload));
@@ -249,6 +249,14 @@ function handleMessage(ws, msg) {
   if (!room) return sendError(ws, "You're not in a game.");
   const me = room.players.find((x) => x.id === ws.playerId);
   if (!me) return sendError(ws, "You're not in a game.");
+
+  if (msg.type === "chat") {
+    const text = String(msg.text || "").trim().slice(0, 200);
+    if (!text) return;
+    log(room, { chat: true, from: me.name, text }); // rides in the log feed alongside game events
+    broadcast(room);
+    return;
+  }
 
   if (msg.type === "addBot") {
     if (ws.playerId !== room.hostId || room.phase !== "lobby") return;

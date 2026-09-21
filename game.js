@@ -1,4 +1,7 @@
 import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPixelatedPass } from "three/addons/postprocessing/RenderPixelatedPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 
 // ---------- Card rendering helpers ----------
 const RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
@@ -124,6 +127,17 @@ function makeCardMesh(card, faceUp) {
   return group;
 }
 
+// Balatro-style "sticker" drop shadow: a dark plane peeking out behind a card
+function addDropShadow(group, offsetX = 0.07, offsetY = -0.07) {
+  const shadow = new THREE.Mesh(
+    new THREE.PlaneGeometry(CARD_W * 1.02, CARD_H * 1.02),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.38, depthWrite: false })
+  );
+  shadow.position.set(offsetX, offsetY, -0.004);
+  shadow.renderOrder = -1;
+  group.add(shadow);
+}
+
 function makeLabelSprite(text) {
   const canvas = document.createElement("canvas");
   canvas.width = 256; canvas.height = 64;
@@ -188,17 +202,25 @@ rim.rotation.x = -Math.PI / 2;
 rim.position.y = -0.01;
 scene.add(rim);
 
+// subtle pixelation (~2 screen px per block) — enough retro texture to keep
+// the flat-color Balatro look without turning card text to mush
+const composer = new EffectComposer(renderer);
+const pixelPass = new RenderPixelatedPass(2, scene, camera, { normalEdgeStrength: 0.4, depthEdgeStrength: 0.3 });
+composer.addPass(pixelPass);
+composer.addPass(new OutputPass());
+
 function resize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
+  composer.setSize(window.innerWidth, window.innerHeight);
 }
 window.addEventListener("resize", resize);
 resize();
 
 function animate() {
   requestAnimationFrame(animate);
-  renderer.render(scene, camera);
+  composer.render();
 }
 animate();
 
@@ -382,6 +404,7 @@ function renderTable() {
       const startX = -((n - 1) * spacing) / 2;
       hand.forEach((card, i) => {
         const mesh = makeCardMesh(card, true);
+        addDropShadow(mesh);
         mesh.position.set(startX + i * spacing, 0.9, seat.z - 1.4);
         mesh.rotation.x = -0.15;
         mesh.userData.myCard = true;
@@ -420,6 +443,7 @@ function renderTable() {
 
   if (latest.discardTop) {
     const mesh = makeCardMesh(latest.discardTop, true);
+    addDropShadow(mesh, 0.05, -0.05);
     mesh.position.set(1.3, 0.03, 0);
     mesh.rotation.x = -Math.PI / 2;
     pileGroup.add(mesh);
@@ -438,7 +462,7 @@ function setActionPanel(buttons) {
   panel.innerHTML = "";
   for (const b of buttons) {
     const el = document.createElement("button");
-    el.className = "action-btn" + (b.gold ? " gold" : "");
+    el.className = "action-btn" + (b.color ? ` ${b.color}` : "");
     el.textContent = b.label;
     el.addEventListener("click", b.onClick);
     panel.appendChild(el);
@@ -473,7 +497,7 @@ function renderActionPanel(isMyTurn) {
   } else if (latest.phase === "draw") {
     armedAction = { type: "take" };
     showHint("Click an opponent to take a card, or the draw pile to draw.");
-    setActionPanel([{ label: "Draw from pile", gold: true, onClick: () => send({ type: "drawPile" }) }]);
+    setActionPanel([{ label: "Draw from pile", color: "green", onClick: () => send({ type: "drawPile" }) }]);
   }
 }
 
@@ -481,9 +505,9 @@ function showExtraDefault() {
   armedAction = null;
   showHint("Optional: ask a question before you draw.");
   setActionPanel([
-    { label: "Ask for a card", onClick: armAskCard },
-    { label: "Ask for a count", onClick: armAskCount },
-    { label: "Skip", gold: true, onClick: () => send({ type: "skipAsk" }) },
+    { label: "Ask for a card", color: "blue", onClick: armAskCard },
+    { label: "Ask for a count", color: "red", onClick: armAskCount },
+    { label: "Skip", color: "gold", onClick: () => send({ type: "skipAsk" }) },
   ]);
 }
 

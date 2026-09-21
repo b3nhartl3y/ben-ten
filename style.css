@@ -33,10 +33,24 @@ html, body {
   color: var(--ink);
 }
 
+.display-font {
+  font-family: "Pixelify Sans", "Fredoka", sans-serif;
+}
+
 #scene {
   position: fixed;
   inset: 0;
   display: block;
+}
+
+/* stage-light vignette over the table, Balatro-style dark corners */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(ellipse at 50% 40%, transparent 40%, rgba(6, 5, 12, 0.65) 100%);
 }
 
 .overlay {
@@ -66,7 +80,8 @@ html, body {
 
 .panel h1 {
   margin: 0 0 4px;
-  font-size: 2.3em;
+  font-family: "Pixelify Sans", "Fredoka", sans-serif;
+  font-size: 2.4em;
   font-weight: 700;
   letter-spacing: 0.5px;
   color: var(--gold);
@@ -200,6 +215,7 @@ html, body {
 }
 
 .room-code {
+  font-family: "Pixelify Sans", "Fredoka", sans-serif;
   font-size: 2.6em;
   font-weight: 700;
   letter-spacing: 10px;
@@ -254,8 +270,9 @@ html, body {
   border: 3px solid var(--gold);
   border-radius: 12px;
   padding: 10px 24px;
+  font-family: "Pixelify Sans", "Fredoka", sans-serif;
   font-weight: 700;
-  font-size: 1.05em;
+  font-size: 1.1em;
   color: var(--gold);
   box-shadow: 0 5px 0 rgba(0,0,0,0.35);
 }
@@ -321,6 +338,30 @@ html, body {
   border-color: var(--outline);
   font-weight: 700;
   box-shadow: 0 5px 0 var(--gold-dark);
+}
+
+.action-btn.blue {
+  background: var(--blue);
+  color: #06202f;
+  border-color: var(--outline);
+  font-weight: 700;
+  box-shadow: 0 5px 0 var(--blue-dark);
+}
+
+.action-btn.red {
+  background: var(--red);
+  color: #350807;
+  border-color: var(--outline);
+  font-weight: 700;
+  box-shadow: 0 5px 0 var(--red-dark);
+}
+
+.action-btn.green {
+  background: var(--green);
+  color: #06301b;
+  border-color: var(--outline);
+  font-weight: 700;
+  box-shadow: 0 5px 0 var(--green-dark);
 }
 
 select {

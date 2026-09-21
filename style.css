@@ -264,26 +264,23 @@ html, body {
   top: max(14px, env(safe-area-inset-top, 0px));
   left: 50%;
   transform: translateX(-50%);
-  background: var(--panel);
-  border: 3px solid var(--outline);
-  border-radius: 12px;
-  padding: 9px 26px;
+  padding: 4px 0;
   font-family: var(--pixel);
   font-weight: 700;
-  font-size: 1.25em;
-  color: var(--ink);
-  box-shadow: 0 5px 0 var(--outline);
+  font-size: 1.7em;
+  letter-spacing: 1px;
+  color: var(--muted);
   white-space: nowrap;
+  /* plain outlined text, not a button */
+  text-shadow: 3px 3px 0 var(--outline), -2px -2px 0 var(--outline), 2px -2px 0 var(--outline), -2px 2px 0 var(--outline);
 }
 #turn-indicator.mine {
-  background: var(--gold);
-  color: var(--gold-ink);
-  box-shadow: 0 5px 0 var(--gold-dark);
-  animation: bounce 0.9s ease-in-out infinite;
+  color: var(--gold);
+  animation: glow 1.4s ease-in-out infinite;
 }
-@keyframes bounce {
-  0%, 100% { transform: translateX(-50%) translateY(0); }
-  50% { transform: translateX(-50%) translateY(-4px); }
+@keyframes glow {
+  0%, 100% { text-shadow: 3px 3px 0 var(--outline), -2px -2px 0 var(--outline), 2px -2px 0 var(--outline), -2px 2px 0 var(--outline); }
+  50% { text-shadow: 3px 3px 0 var(--outline), -2px -2px 0 var(--outline), 2px -2px 0 var(--outline), -2px 2px 0 var(--outline), 0 0 18px rgba(255, 205, 60, 0.8); }
 }
 
 #log {

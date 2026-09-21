@@ -116,6 +116,7 @@ function broadcast(room) {
       drawCount: room.drawPile.length,
       log: room.log.slice(-40),
       winnerId: room.winnerId,
+      winnerHand: room.phase === "over" ? (room.players.find((x) => x.id === room.winnerId) || {}).hand || null : null,
     };
     p.ws.send(JSON.stringify(payload));
   }

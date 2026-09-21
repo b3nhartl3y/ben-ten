@@ -125,32 +125,34 @@ function getBackTexture() {
   backTexture = new THREE.CanvasTexture(canvas);
   backTexture.colorSpace = THREE.SRGBColorSpace;
 
-  const img = new Image();
-  img.onload = () => {
-    // pixelate: shrink to a 24px grid, then blow back up with smoothing off
-    const small = document.createElement("canvas");
-    const N = 24;
-    small.width = N; small.height = N;
-    const s = small.getContext("2d");
-    const side = Math.min(img.width, img.height);
-    s.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, N, N);
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(CX, CY, R, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(small, CX - R, CY - R, R * 2, R * 2);
-    ctx.restore();
-    ctx.strokeStyle = CARD_INK;
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.arc(CX, CY, R, 0, Math.PI * 2);
-    ctx.stroke();
+  pixelFace.then((face) => {
+    ctx.drawImage(face, CX - R, CY - R, R * 2, R * 2);
     backTexture.needsUpdate = true;
-  };
-  img.src = "bg.jpg";
+  });
   return backTexture;
 }
+
+// Pixelated portrait in a circle with an ink ring, shared by card backs and confetti.
+const pixelFace = new Promise((resolve) => {
+  const img = new Image();
+  img.onload = () => {
+    const N = 24, SIZE = 192, R = SIZE / 2;
+    const small = document.createElement("canvas");
+    small.width = N; small.height = N;
+    const side = Math.min(img.width, img.height);
+    small.getContext("2d").drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, N, N);
+    const out = document.createElement("canvas");
+    out.width = SIZE; out.height = SIZE;
+    const o = out.getContext("2d");
+    o.beginPath(); o.arc(R, R, R - 3, 0, Math.PI * 2); o.clip();
+    o.imageSmoothingEnabled = false;
+    o.drawImage(small, 0, 0, SIZE, SIZE);
+    o.strokeStyle = CARD_INK; o.lineWidth = 7;
+    o.beginPath(); o.arc(R, R, R - 3, 0, Math.PI * 2); o.stroke();
+    resolve(out);
+  };
+  img.src = "bg.jpg";
+});
 
 const CARD_W = 1.5, CARD_H = 2.1;
 const cardGeo = new THREE.PlaneGeometry(CARD_W, CARD_H);
@@ -474,14 +476,48 @@ function render() {
   renderTable(isMyTurn);
   renderActionPanel(isMyTurn);
 
-  if (latest.phase === "over") {
+  if (latest.phase === "over" && $("win-screen").classList.contains("hidden")) {
     const winner = latest.players.find((p) => p.id === latest.winnerId);
     $("win-title").textContent = "BEN TEN!";
     $("win-subtitle").textContent = winner
-      ? (winner.id === myId ? "You win — your hand totals exactly 10." : `${winner.name} wins — their hand totals exactly 10.`)
+      ? (winner.id === myId ? "You win! Your hand totals exactly 10." : `${winner.name} wins with exactly 10.`)
       : "";
+    $("hud").classList.add("hidden");
     $("win-screen").classList.remove("hidden");
+    startConfetti();
   }
+}
+
+// ---------- Confetti ----------
+async function startConfetti() {
+  const face = await pixelFace;
+  const c = $("confetti");
+  const ctx = c.getContext("2d");
+  const colors = ["#ffcd3c", "#ff5d5d", "#4fb4ff", "#4be08a", "#ff8f2b", "#fdf6e8"];
+  const bits = Array.from({ length: 200 }, (_, i) => ({
+    face: i % 4 === 0, // every fourth piece is a falling pixel face
+    x: Math.random() * innerWidth, y: -40 - Math.random() * innerHeight,
+    vx: (Math.random() - 0.5) * 1.5, vy: 2 + Math.random() * 3,
+    w: 6 + Math.random() * 6, h: 8 + Math.random() * 8,
+    size: 34 + Math.random() * 30,
+    rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.15,
+    color: colors[(Math.random() * colors.length) | 0],
+  }));
+  let frames = 0;
+  function tick() {
+    c.width = innerWidth; c.height = innerHeight;
+    for (const b of bits) {
+      b.x += b.vx + Math.sin(frames / 20 + b.y / 50) * 0.6; b.y += b.vy; b.rot += b.vr;
+      if (b.y > innerHeight + 40 && frames < 420) { b.y = -40; b.x = Math.random() * innerWidth; }
+      ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.rot);
+      if (b.face) ctx.drawImage(face, -b.size / 2, -b.size / 2, b.size, b.size);
+      else { ctx.fillStyle = b.color; ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h); }
+      ctx.restore();
+    }
+    if (++frames < 720) requestAnimationFrame(tick);
+    else ctx.clearRect(0, 0, c.width, c.height);
+  }
+  tick();
 }
 
 function renderLobby() {
@@ -505,7 +541,27 @@ function renderLobby() {
 const discardHistory = []; // client-side memory of recent discards so the pile looks like a pile
 const cardValue = (c) => (c.rank === "A" ? 1 : ["J", "Q", "K"].includes(c.rank) ? 10 : parseInt(c.rank, 10));
 
+// Game over: clear the table and lay the winner's hand out big in the middle
+function renderWinTable() {
+  const seen = new Set();
+  beginLabels();
+  const hand = latest.winnerHand || [];
+  const scale = portrait ? Math.min(1.15, (halfW * 2 - 0.8) / (hand.length * CARD_W * 1.05)) : 1.35;
+  const spacing = CARD_W * scale * 1.08;
+  const startX = -((hand.length - 1) * spacing) / 2;
+  hand.forEach((card, i) => {
+    const key = `card:${card.id}`;
+    const e = cards.get(key) || spawnCard(key, card, { x: 0, y: halfH + 3 });
+    e.dying = false; e.wobble = true; e.tag = {};
+    e.target = { x: startX + i * spacing, y: 0.6, z: 1 + i * 0.01, rot: (i - (hand.length - 1) / 2) * -0.06, scale };
+    seen.add(key);
+  });
+  for (const [key, e] of cards) if (!seen.has(key)) { e.dying = true; e.tag = {}; }
+  endLabels();
+}
+
 function renderTable(isMyTurn) {
+  if (latest.phase === "over") { renderWinTable(); return; }
   const seen = new Set();
   const players = latest.players;
   const startIdx = players.findIndex((p) => p.id === myId);
@@ -727,3 +783,4 @@ $("chat-form").addEventListener("submit", (ev) => {
 
 resize();
 animate();
+window.__ben = { state: () => latest, send }; // debug hook for scripted testing

@@ -3,10 +3,14 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPixelatedPass } from "three/addons/postprocessing/RenderPixelatedPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 
-// ---------- Card rendering helpers ----------
+// ---------- Card art ----------
 const RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+// ponytail: rounded Fredoka on the cards, pixel font stays in the HTML labels — pixel glyphs go ambiguous under the pixel pass
 const CARD_FONT = '"Fredoka", "Arial Black", sans-serif';
-document.fonts.load(`700 60px ${CARD_FONT}`); // kick off webfont load before any card is drawn
+document.fonts.load(`700 60px ${CARD_FONT}`);
+
+const SUIT_COLORS = { "♥": "#ff4c40", "♦": "#ff8f2b", "♠": "#2b3560", "♣": "#1d5c8e" };
+const CARD_INK = "#1a1626";
 
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -18,49 +22,54 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-// Balatro-ish flat colors: vivid red for hearts/diamonds, ink-navy for clubs/spades
-const CARD_INK = "#15121f";
-const CARD_RED = "#ff5d5d";
+function newCardCanvas() {
+  const c = document.createElement("canvas");
+  c.width = 512; c.height = 716;
+  c.getContext("2d").scale(2, 2); // draw in 256x358 coords at 2x resolution
+  return c;
+}
 
 const faceTextureCache = new Map();
 function faceTexture(card) {
   const key = card.rank + card.suit;
   if (faceTextureCache.has(key)) return faceTextureCache.get(key);
-  const color = card.color === "#c0392b" ? CARD_RED : CARD_INK;
-  const canvas = document.createElement("canvas");
-  canvas.width = 256; canvas.height = 358;
+  const color = SUIT_COLORS[card.symbol] || CARD_INK;
+  const canvas = newCardCanvas();
   const ctx = canvas.getContext("2d");
 
-  ctx.fillStyle = "#f7f1e3";
-  roundRect(ctx, 6, 6, 244, 346, 22);
+  ctx.fillStyle = "#f8f2e4";
+  roundRect(ctx, 6, 6, 244, 346, 20);
   ctx.fill();
   ctx.strokeStyle = CARD_INK;
-  ctx.lineWidth = 9;
-  roundRect(ctx, 6, 6, 244, 346, 22);
+  ctx.lineWidth = 10;
+  roundRect(ctx, 6, 6, 244, 346, 20);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(26,22,38,0.12)";
+  ctx.lineWidth = 3;
+  roundRect(ctx, 22, 22, 212, 314, 12);
   ctx.stroke();
 
   ctx.fillStyle = color;
-  ctx.font = `700 46px ${CARD_FONT}`;
   ctx.textBaseline = "top";
-  ctx.fillText(card.rank, 22, 18);
-  ctx.font = `44px ${CARD_FONT}`;
-  ctx.fillText(card.symbol, 22, 68);
+  ctx.textAlign = "left";
+  ctx.font = `700 64px ${CARD_FONT}`;
+  ctx.fillText(card.rank, 24, 16);
+  ctx.font = `52px sans-serif`;
+  ctx.fillText(card.symbol, 26, 82);
 
   ctx.save();
-  ctx.translate(234, 340);
+  ctx.translate(232, 342);
   ctx.rotate(Math.PI);
-  ctx.font = `700 46px ${CARD_FONT}`;
-  ctx.textBaseline = "top";
+  ctx.font = `700 64px ${CARD_FONT}`;
   ctx.fillText(card.rank, 0, 0);
-  ctx.font = `44px ${CARD_FONT}`;
-  ctx.fillText(card.symbol, 0, 52);
+  ctx.font = `52px sans-serif`;
+  ctx.fillText(card.symbol, 2, 66);
   ctx.restore();
 
-  ctx.fillStyle = color;
-  ctx.font = "120px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(card.symbol, 128, 190);
+  ctx.font = "150px sans-serif";
+  ctx.fillText(card.symbol, 128, 196);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -71,42 +80,39 @@ function faceTexture(card) {
 let backTexture = null;
 function getBackTexture() {
   if (backTexture) return backTexture;
-  const canvas = document.createElement("canvas");
-  canvas.width = 256; canvas.height = 358;
+  const canvas = newCardCanvas();
   const ctx = canvas.getContext("2d");
 
-  ctx.fillStyle = "#241f38";
-  roundRect(ctx, 6, 6, 244, 346, 22);
+  ctx.fillStyle = "#3b6fd6";
+  roundRect(ctx, 6, 6, 244, 346, 20);
   ctx.fill();
-  ctx.strokeStyle = CARD_INK;
-  ctx.lineWidth = 9;
-  roundRect(ctx, 6, 6, 244, 346, 22);
-  ctx.stroke();
-  ctx.strokeStyle = "#ffcd3c";
-  ctx.lineWidth = 5;
-  roundRect(ctx, 20, 20, 216, 318, 16);
-  ctx.stroke();
-
-  // diamond lattice, Balatro-card-back style
-  ctx.strokeStyle = "rgba(255, 205, 60, 0.35)";
-  ctx.lineWidth = 2;
-  for (let x = -358; x < 256 + 358; x += 36) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x + 358, 358);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(x, 358);
-    ctx.lineTo(x + 358, 0);
-    ctx.stroke();
+  ctx.save();
+  roundRect(ctx, 6, 6, 244, 346, 20);
+  ctx.clip();
+  ctx.strokeStyle = "rgba(255,255,255,0.22)";
+  ctx.lineWidth = 6;
+  for (let x = -358; x < 256 + 358; x += 34) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 358, 358); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, 358); ctx.lineTo(x + 358, 0); ctx.stroke();
   }
+  ctx.restore();
+  ctx.strokeStyle = CARD_INK;
+  ctx.lineWidth = 10;
+  roundRect(ctx, 6, 6, 244, 346, 20);
+  ctx.stroke();
+  ctx.strokeStyle = "#f8f2e4";
+  ctx.lineWidth = 5;
+  roundRect(ctx, 24, 24, 208, 310, 12);
+  ctx.stroke();
 
   ctx.fillStyle = "#ffcd3c";
+  ctx.strokeStyle = CARD_INK;
+  ctx.lineWidth = 8;
   ctx.beginPath();
-  ctx.ellipse(128, 179, 78, 46, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#241f38";
-  ctx.font = `700 30px ${CARD_FONT}`;
+  ctx.ellipse(128, 179, 82, 50, 0, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = CARD_INK;
+  ctx.font = `700 40px ${CARD_FONT}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText("BEN 10", 128, 181);
@@ -116,150 +122,191 @@ function getBackTexture() {
   return backTexture;
 }
 
-const CARD_W = 1.0, CARD_H = 1.4;
-function makeCardMesh(card, faceUp) {
-  const geo = new THREE.PlaneGeometry(CARD_W, CARD_H);
-  const frontMat = new THREE.MeshBasicMaterial({ map: faceUp ? faceTexture(card) : getBackTexture(), side: THREE.FrontSide });
-  const backMat = new THREE.MeshBasicMaterial({ map: getBackTexture(), side: THREE.BackSide });
+const CARD_W = 1.5, CARD_H = 2.1;
+const cardGeo = new THREE.PlaneGeometry(CARD_W, CARD_H);
+const shadowGeo = new THREE.PlaneGeometry(CARD_W * 1.02, CARD_H * 1.02);
+const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false });
+
+function makeCardGroup(card) {
   const group = new THREE.Group();
-  group.add(new THREE.Mesh(geo, frontMat), new THREE.Mesh(geo, backMat));
+  const mat = new THREE.MeshBasicMaterial({ map: card ? faceTexture(card) : getBackTexture() });
+  const face = new THREE.Mesh(cardGeo, mat);
+  const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+  shadow.position.set(0.09, -0.11, -0.02);
+  group.add(shadow, face);
   group.userData.card = card;
   return group;
 }
 
-// Balatro-style "sticker" drop shadow: a dark plane peeking out behind a card
-function addDropShadow(group, offsetX = 0.07, offsetY = -0.07) {
-  const shadow = new THREE.Mesh(
-    new THREE.PlaneGeometry(CARD_W * 1.02, CARD_H * 1.02),
-    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.38, depthWrite: false })
-  );
-  shadow.position.set(offsetX, offsetY, -0.004);
-  shadow.renderOrder = -1;
-  group.add(shadow);
-}
-
-function makeLabelSprite(text) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 256; canvas.height = 64;
-  const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#211c33";
-  roundRect(ctx, 2, 2, 252, 60, 16);
-  ctx.fill();
-  ctx.strokeStyle = "#ffcd3c";
-  ctx.lineWidth = 4;
-  roundRect(ctx, 2, 2, 252, 60, 16);
-  ctx.stroke();
-  ctx.fillStyle = "#fdf6e8";
-  ctx.font = `700 28px ${CARD_FONT}`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, 128, 33);
-  const tex = new THREE.CanvasTexture(canvas);
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex }));
-  sprite.scale.set(1.4, 0.35, 1);
-  return sprite;
-}
-
-// ---------- Scene setup ----------
+// ---------- Scene ----------
 const canvas = document.getElementById("scene");
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x15121f);
 
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.set(0, 7.2, 8.4);
-camera.lookAt(0, 0, -0.3);
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+camera.position.set(0, 0, 20);
+camera.lookAt(0, 0, 0);
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.95));
-const dirLight = new THREE.DirectionalLight(0xfff2d0, 0.55);
-dirLight.position.set(3, 8, 5);
-scene.add(dirLight);
+// Balatro-style paint swirl. Ported from the well-known Shadertoy recreation.
+const bgMat = new THREE.ShaderMaterial({
+  depthWrite: false,
+  uniforms: { uTime: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: `
+    precision highp float;
+    varying vec2 vUv;
+    uniform float uTime; uniform vec2 uRes;
+    const vec4 C1 = vec4(0.871, 0.267, 0.231, 1.0);
+    const vec4 C2 = vec4(0.0, 0.42, 0.706, 1.0);
+    const vec4 C3 = vec4(0.086, 0.137, 0.145, 1.0);
+    const float CONTRAST = 3.5, LIGHTING = 0.4, SPIN_AMOUNT = 0.25, PIXEL_FILTER = 700.0, SPIN_EASE = 1.0;
+    void main(){
+      vec2 screen = vUv * uRes;
+      float pixel_size = length(uRes) / PIXEL_FILTER;
+      vec2 uv = (floor(screen / pixel_size) * pixel_size - 0.5 * uRes) / length(uRes);
+      float uv_len = length(uv);
+      float speed = -2.0 * SPIN_EASE * 0.2 + 302.2;
+      float ang = atan(uv.y, uv.x) + speed - SPIN_EASE * 20.0 * (SPIN_AMOUNT * uv_len + (1.0 - SPIN_AMOUNT));
+      vec2 mid = (uRes / length(uRes)) / 2.0;
+      uv = vec2(uv_len * cos(ang) + mid.x, uv_len * sin(ang) + mid.y) - mid;
+      uv *= 30.0;
+      speed = uTime * 7.0;
+      vec2 uv2 = vec2(uv.x + uv.y);
+      for (int i = 0; i < 5; i++) {
+        uv2 += sin(max(uv.x, uv.y)) + uv;
+        uv += 0.5 * vec2(cos(5.1123314 + 0.353 * uv2.y + speed * 0.131121), sin(uv2.x - 0.113 * speed));
+        uv -= cos(uv.x + uv.y) - sin(uv.x * 0.711 - uv.y);
+      }
+      float cm = 0.25 * CONTRAST + 0.5 * SPIN_AMOUNT + 1.2;
+      float paint = min(2.0, max(0.0, length(uv) * 0.035 * cm));
+      float c1p = max(0.0, 1.0 - cm * abs(1.0 - paint));
+      float c2p = max(0.0, 1.0 - cm * abs(paint));
+      float c3p = 1.0 - min(1.0, c1p + c2p);
+      float light = (LIGHTING - 0.2) * max(c1p * 5.0 - 4.0, 0.0) + LIGHTING * max(c2p * 5.0 - 4.0, 0.0);
+      vec4 col = (0.3 / CONTRAST) * C1 + (1.0 - 0.3 / CONTRAST) * (C1 * c1p + C2 * c2p + vec4(c3p * C3.rgb, c3p)) + light;
+      // dim + slight desaturate so cards pop off it
+      vec3 rgb = col.rgb * 0.68;
+      float g = dot(rgb, vec3(0.299, 0.587, 0.114));
+      gl_FragColor = vec4(mix(vec3(g), rgb, 0.85), 1.0);
+    }`,
+});
+const bg = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bgMat);
+bg.position.z = -5;
+scene.add(bg);
 
-function makeTableTexture() {
-  const canvas = document.createElement("canvas");
-  canvas.width = 512; canvas.height = 512;
-  const ctx = canvas.getContext("2d");
-  const grad = ctx.createRadialGradient(256, 256, 40, 256, 256, 256);
-  grad.addColorStop(0, "#2e2748");
-  grad.addColorStop(1, "#1c1830");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 512, 512);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-const table = new THREE.Mesh(
-  new THREE.CircleGeometry(6.2, 48),
-  new THREE.MeshStandardMaterial({ map: makeTableTexture() })
-);
-table.rotation.x = -Math.PI / 2;
-scene.add(table);
-
-const rim = new THREE.Mesh(new THREE.RingGeometry(6.2, 6.55, 48), new THREE.MeshStandardMaterial({ color: 0xffcd3c }));
-rim.rotation.x = -Math.PI / 2;
-rim.position.y = -0.01;
-scene.add(rim);
-
-// subtle pixelation (~2 screen px per block) — enough retro texture to keep
-// the flat-color Balatro look without turning card text to mush
 const composer = new EffectComposer(renderer);
-const pixelPass = new RenderPixelatedPass(2, scene, camera, { normalEdgeStrength: 0.4, depthEdgeStrength: 0.3 });
+const pixelPass = new RenderPixelatedPass(2, scene, camera, { normalEdgeStrength: 0, depthEdgeStrength: 0.35 });
 composer.addPass(pixelPass);
 composer.addPass(new OutputPass());
 
-// Perspective FOV is vertical, so a narrow portrait screen (small aspect)
-// crops the table horizontally unless we widen the vertical FOV to
-// compensate — this keeps the horizontal field of view roughly constant
-// across phone/tablet/desktop instead of zooming in on tall screens.
-const TARGET_HORIZONTAL_FOV = 62;
-const BASE_VERTICAL_FOV = 45;
-
+// View: always at least 12 units wide and 10 tall; layout is derived from the half-extents.
+let halfW = 6, halfH = 5, portrait = false;
 function resize() {
-  const w = window.innerWidth, h = window.innerHeight;
-  const aspect = w / h;
-  if (aspect < 1) {
-    const hFovRad = THREE.MathUtils.degToRad(TARGET_HORIZONTAL_FOV);
-    const vFovRad = 2 * Math.atan(Math.tan(hFovRad / 2) / aspect);
-    camera.fov = Math.min(THREE.MathUtils.radToDeg(vFovRad), 100);
-  } else {
-    camera.fov = BASE_VERTICAL_FOV;
-  }
-  camera.aspect = aspect;
+  const w = window.innerWidth, h = window.innerHeight, aspect = w / h;
+  portrait = aspect < 0.85;
+  if (portrait) { halfW = 3.8; halfH = halfW / aspect; }
+  else { halfH = Math.max(5, 6 / aspect); halfW = halfH * aspect; }
+  camera.left = -halfW; camera.right = halfW; camera.top = halfH; camera.bottom = -halfH;
   camera.updateProjectionMatrix();
+  bg.scale.set(halfW * 2, halfH * 2, 1);
+  bgMat.uniforms.uRes.value.set(w, h);
   renderer.setSize(w, h);
   composer.setSize(w, h);
+  if (latest && latest.phase !== "lobby") renderTable(latest.currentPlayerId === myId);
 }
 window.addEventListener("resize", resize);
-resize();
+
+// ---------- Animated card registry ----------
+// key -> { group, target:{x,y,z,rot,scale}, phase, dying }
+const cards = new Map();
+const cardLayer = new THREE.Group();
+scene.add(cardLayer);
+const clock = new THREE.Clock();
+let hoveredKey = null;
+const pointerWorld = new THREE.Vector2();
+
+function spawnCard(key, card, from) {
+  const group = makeCardGroup(card);
+  group.position.set(from.x, from.y, 2);
+  group.scale.setScalar(0.9);
+  const entry = { key, group, target: { x: from.x, y: from.y, z: 0, rot: 0, scale: 1 }, phase: Math.random() * Math.PI * 2, dying: false, wobble: false, tag: {} };
+  group.userData.entry = entry;
+  cardLayer.add(group);
+  cards.set(key, entry);
+  return entry;
+}
+
+function deckPos() { return { x: -1.25, y: portrait ? 1.2 : 0.35 }; }
+function discardPos() { return { x: 1.25, y: portrait ? 1.2 : 0.35 }; }
 
 function animate() {
   requestAnimationFrame(animate);
-  composer.render();
-}
-animate();
+  const t = clock.getElapsedTime();
+  bgMat.uniforms.uTime.value = t;
 
-const handGroup = new THREE.Group();
-scene.add(handGroup);
-const pileGroup = new THREE.Group();
-scene.add(pileGroup);
-
-function clearGroup(group) {
-  while (group.children.length) group.remove(group.children[0]);
-}
-
-function seatPositions(count) {
-  const positions = [{ x: 0, z: 4.4, angle: 0 }];
-  const others = count - 1;
-  const spread = Math.PI * 0.7;
-  for (let i = 0; i < others; i++) {
-    const t = others === 1 ? 0 : i / (others - 1) - 0.5;
-    const angle = t * spread;
-    const radius = 4.2;
-    positions.push({ x: Math.sin(angle) * radius, z: -Math.cos(angle) * radius, angle });
+  for (const [key, e] of cards) {
+    const g = e.group, tg = e.target;
+    const hovered = key === hoveredKey && !e.dying;
+    const ty = tg.y + (hovered ? 0.35 : 0) + (e.wobble ? Math.sin(t * 1.6 + e.phase) * 0.04 : 0);
+    const ts = e.dying ? 0 : tg.scale * (hovered ? 1.1 : 1);
+    const tz = hovered ? 3 : tg.z;
+    const k = 0.16;
+    g.position.x += (tg.x - g.position.x) * k;
+    g.position.y += (ty - g.position.y) * k;
+    g.position.z += (tz - g.position.z) * k;
+    g.scale.x += (ts - g.scale.x) * k;
+    g.scale.y += (ts - g.scale.y) * k;
+    const idleRot = e.wobble ? Math.sin(t * 1.1 + e.phase) * 0.025 : 0;
+    g.rotation.z += (tg.rot + idleRot - g.rotation.z) * k;
+    let tiltX = 0, tiltY = 0;
+    if (hovered) {
+      tiltY = THREE.MathUtils.clamp((pointerWorld.x - g.position.x) / CARD_W, -1, 1) * 0.35;
+      tiltX = -THREE.MathUtils.clamp((pointerWorld.y - g.position.y) / CARD_H, -1, 1) * 0.35;
+    }
+    g.rotation.x += (tiltX - g.rotation.x) * k;
+    g.rotation.y += (tiltY - g.rotation.y) * k;
+    if (e.dying && g.scale.x < 0.04) {
+      cardLayer.remove(g);
+      g.children[1].material.dispose();
+      cards.delete(key);
+    }
   }
-  return positions;
+  composer.render();
+  syncLabels();
+}
+
+// ---------- HTML labels pinned to world positions ----------
+const labelLayer = document.getElementById("labels");
+const labels = new Map(); // key -> { el, x, y }
+function label(key, text, x, y, className = "", onClick = null) {
+  let l = labels.get(key);
+  if (!l) {
+    const el = document.createElement("div");
+    el.className = "world-label";
+    labelLayer.appendChild(el);
+    l = { el, x, y };
+    labels.set(key, l);
+  }
+  l.x = x; l.y = y; l.alive = true;
+  if (l.el.textContent !== text) l.el.textContent = text;
+  l.el.className = "world-label " + className;
+  l.el.onclick = onClick;
+  l.el.style.pointerEvents = onClick ? "auto" : "none";
+  return l;
+}
+const projV = new THREE.Vector3();
+function syncLabels() {
+  const w = window.innerWidth, h = window.innerHeight;
+  for (const l of labels.values()) {
+    projV.set(l.x, l.y, 0).project(camera);
+    const sx = (projV.x + 1) / 2 * w, sy = (1 - projV.y) / 2 * h;
+    l.el.style.transform = `translate(-50%, -50%) translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px)`;
+  }
+}
+function beginLabels() { for (const l of labels.values()) l.alive = false; }
+function endLabels() {
+  for (const [k, l] of labels) if (!l.alive) { l.el.remove(); labels.delete(k); }
 }
 
 // ---------- WebSocket client ----------
@@ -267,17 +314,14 @@ const wsProtocol = location.protocol === "https:" ? "wss:" : "ws:";
 const ws = new WebSocket(`${wsProtocol}//${location.host}/ws`);
 
 let myId = null;
-let latest = null; // last state message from server
+let latest = null;
+let prev = null;
 let myName = "";
 
 const $ = (id) => document.getElementById(id);
 
-ws.addEventListener("open", () => {
-  $("setup-error").textContent = "";
-});
-ws.addEventListener("close", () => {
-  $("setup-error").textContent = "Disconnected from server. Refresh to try again.";
-});
+ws.addEventListener("open", () => { $("setup-error").textContent = ""; });
+ws.addEventListener("close", () => { $("setup-error").textContent = "Disconnected from server. Refresh to try again."; });
 
 ws.addEventListener("message", (evt) => {
   const msg = JSON.parse(evt.data);
@@ -286,11 +330,9 @@ ws.addEventListener("message", (evt) => {
     showWaitingRoom(msg.code);
     return;
   }
-  if (msg.type === "error") {
-    $("setup-error").textContent = msg.message;
-    return;
-  }
+  if (msg.type === "error") { $("setup-error").textContent = msg.message; return; }
   if (msg.type === "state") {
+    prev = latest;
     latest = msg;
     render();
   }
@@ -305,7 +347,6 @@ $("create-btn").addEventListener("click", () => {
   myName = $("name-input").value.trim() || "Host";
   send({ type: "create", name: myName });
 });
-
 $("join-btn").addEventListener("click", () => {
   myName = $("name-input").value.trim() || "Player";
   const code = $("code-input").value.trim().toUpperCase();
@@ -327,49 +368,36 @@ $("difficulty-choice").addEventListener("click", (e) => {
   btn.classList.add("selected");
   chosenHandSize = parseInt(btn.dataset.handSize, 10);
 });
-
 $("add-bot-btn").addEventListener("click", () => send({ type: "addBot" }));
 $("start-btn").addEventListener("click", () => send({ type: "start", handSize: chosenHandSize }));
 $("restart-btn").addEventListener("click", () => location.reload());
 
-// ---------- Rendering the live game state ----------
-function log(msg) {
-  const el = $("log");
-  const line = document.createElement("div");
-  line.textContent = msg;
-  el.appendChild(line);
-  el.scrollTop = el.scrollHeight;
-}
-
+// ---------- Render ----------
 let renderedLogCount = 0;
 let renderedPlayerCount = -1;
 
 function render() {
   if (!latest) return;
+  if (latest.phase === "lobby") { renderLobby(); return; }
 
-  if (latest.phase === "lobby") {
-    renderLobby();
-    return;
-  }
-
-  if ($("waiting-screen").classList.contains("hidden") === false) {
-    $("waiting-screen").classList.add("hidden");
-  }
+  $("waiting-screen").classList.add("hidden");
   $("hud").classList.remove("hidden");
 
   if (latest.log.length !== renderedLogCount) {
-    $("log").innerHTML = "";
-    latest.log.forEach(log);
+    const el = $("log");
+    el.innerHTML = "";
+    latest.log.forEach((m) => { const d = document.createElement("div"); d.textContent = m; el.appendChild(d); });
+    el.scrollTop = el.scrollHeight;
     renderedLogCount = latest.log.length;
   }
 
   const isMyTurn = latest.currentPlayerId === myId;
-  const currentPlayer = latest.players.find((p) => p.id === latest.currentPlayerId);
-  $("turn-indicator").textContent = latest.phase === "over"
-    ? "Game over"
-    : isMyTurn ? "Your turn" : `${currentPlayer ? currentPlayer.name : "…"}'s turn`;
+  const current = latest.players.find((p) => p.id === latest.currentPlayerId);
+  const ti = $("turn-indicator");
+  ti.textContent = latest.phase === "over" ? "Game over" : isMyTurn ? "Your turn" : `${current ? current.name : "…"}'s turn`;
+  ti.classList.toggle("mine", isMyTurn && latest.phase !== "over");
 
-  renderTable();
+  renderTable(isMyTurn);
   renderActionPanel(isMyTurn);
 
   if (latest.phase === "over") {
@@ -387,92 +415,119 @@ function renderLobby() {
   const isHost = latest.hostId === myId;
   $("host-controls").classList.toggle("hidden", !isHost);
   $("waiting-hint").classList.toggle("hidden", isHost);
-
   if (latest.players.length !== renderedPlayerCount) {
     const list = $("player-list");
     list.innerHTML = "";
     latest.players.forEach((p) => {
       const row = document.createElement("div");
       row.className = "player-row";
-      row.innerHTML = `<span>${p.name}${p.id === latest.hostId ? " (host)" : ""}</span>` +
-        (p.isBot ? '<span class="tag">bot</span>' : "");
+      row.innerHTML = `<span>${p.name}${p.id === latest.hostId ? " (host)" : ""}</span>` + (p.isBot ? '<span class="tag">bot</span>' : "");
       list.appendChild(row);
     });
     renderedPlayerCount = latest.players.length;
   }
 }
 
-function renderTable() {
-  clearGroup(handGroup);
-  clearGroup(pileGroup);
+const discardHistory = []; // client-side memory of recent discards so the pile looks like a pile
+const cardValue = (c) => (c.rank === "A" ? 1 : ["J", "Q", "K"].includes(c.rank) ? 10 : parseInt(c.rank, 10));
 
+function renderTable(isMyTurn) {
+  const seen = new Set();
   const players = latest.players;
   const startIdx = players.findIndex((p) => p.id === myId);
   const seated = players.slice(startIdx).concat(players.slice(0, startIdx));
-  const seats = seatPositions(seated.length);
+  const opps = seated.slice(1);
 
-  seated.forEach((p, seatIdx) => {
-    const seat = seats[seatIdx];
-    if (seatIdx === 0) {
-      const hand = latest.you.hand;
-      const n = hand.length;
-      const spacing = 1.05;
-      const startX = -((n - 1) * spacing) / 2;
-      hand.forEach((card, i) => {
-        const mesh = makeCardMesh(card, true);
-        addDropShadow(mesh);
-        mesh.position.set(startX + i * spacing, 0.9, seat.z - 1.4);
-        mesh.rotation.x = -0.15;
-        mesh.userData.myCard = true;
-        handGroup.add(mesh);
-      });
-    } else {
-      const n = p.count;
-      const spacing = 0.32;
-      const startX = -((n - 1) * spacing) / 2;
-      for (let i = 0; i < n; i++) {
-        const mesh = makeCardMesh(null, false);
-        const localX = startX + i * spacing;
-        mesh.position.set(seat.x + localX * Math.cos(seat.angle), 0.05 + i * 0.002, seat.z + localX * Math.sin(seat.angle));
-        mesh.rotation.x = -Math.PI / 2;
-        mesh.rotation.z = seat.angle;
-        mesh.userData.opponentId = p.id;
-        handGroup.add(mesh);
-      }
-      const label = makeLabelSprite(p.name + (p.connected ? "" : " (away)"));
-      label.position.set(seat.x * 1.18, 0.6, seat.z * 1.18);
-      label.userData.opponentId = p.id;
-      handGroup.add(label);
+  // Where a newly-appeared card should fly in from: an opponent whose hand shrank, else the deck.
+  let spawnFrom = deckPos();
+  if (prev) {
+    const shrunk = opps.find((p) => { const q = prev.players.find((x) => x.id === p.id); return q && q.count > p.count; });
+    if (shrunk) spawnFrom = oppPos(opps.indexOf(shrunk), opps.length);
+  }
+
+  beginLabels();
+
+  // --- my hand ---
+  const hand = latest.you.hand;
+  const handY = -halfH + (portrait ? 5.1 : 2.95);
+  const spacing = Math.min(1.65, (halfW * 2 - 1.2 - CARD_W) / Math.max(hand.length - 1, 1));
+  const startX = -((hand.length - 1) * spacing) / 2;
+  hand.forEach((card, i) => {
+    const key = `card:${card.id}`;
+    let e = cards.get(key) || spawnCard(key, card, spawnFrom);
+    e.dying = false; e.wobble = true;
+    e.tag = { myCard: true, cardId: card.id };
+    e.target = { x: startX + i * spacing, y: handY, z: 0.1 + i * 0.01, rot: (i - (hand.length - 1) / 2) * -0.03, scale: 1 };
+    seen.add(key);
+  });
+  const total = hand.reduce((s, c) => s + cardValue(c), 0);
+  const handRight = startX + (hand.length - 1) * spacing + CARD_W / 2;
+  if (portrait) label("me", `${myName || "You"} · ${total}`, 0, handY + CARD_H / 2 + 0.6, total === 10 ? "gold" : "");
+  else label("me", `${myName || "You"} · ${total}`, Math.min(handRight + 1.1, halfW - 1.3), handY, total === 10 ? "gold" : "");
+
+  // --- opponents ---
+  opps.forEach((p, idx) => {
+    const pos = oppPos(idx, opps.length);
+    const n = p.count, s = portrait ? 0.5 : 0.62, sp = portrait ? 0.2 : 0.28;
+    const sx = -((n - 1) * sp) / 2;
+    for (let i = 0; i < n; i++) {
+      const key = `opp:${p.id}:${i}`;
+      let e = cards.get(key) || spawnCard(key, null, deckPos());
+      e.dying = false; e.wobble = false;
+      e.tag = { opponentId: p.id };
+      e.target = { x: pos.x + sx + i * sp, y: pos.y + Math.abs(i - (n - 1) / 2) * -0.03, z: 0.1 + i * 0.01, rot: (i - (n - 1) / 2) * -0.08, scale: s };
+      seen.add(key);
     }
+    const active = p.id === latest.currentPlayerId && latest.phase !== "over";
+    const clickable = isMyTurn && (latest.phase === "extra" || latest.phase === "draw");
+    label(`opp:${p.id}`, p.name + (p.connected ? "" : " (away)") + ` · ${n}`, pos.x, pos.y + CARD_H * s / 2 + 0.5,
+      (active ? "active " : "") + (clickable ? "clickable" : ""),
+      clickable ? () => onOpponentClick(p.id) : null);
   });
 
-  const drawStackHeight = Math.min(latest.drawCount, 20);
-  for (let i = 0; i < drawStackHeight; i++) {
-    const mesh = makeCardMesh(null, false);
-    mesh.position.set(-1.3, 0.03 + i * 0.006, 0);
-    mesh.rotation.x = -Math.PI / 2;
-    pileGroup.add(mesh);
+  // --- draw pile ---
+  const d = deckPos();
+  const stack = Math.min(latest.drawCount, 6);
+  for (let i = 0; i < stack; i++) {
+    const key = `deck:${i}`;
+    let e = cards.get(key) || spawnCard(key, null, d);
+    e.dying = false; e.wobble = false;
+    e.tag = { deck: true };
+    e.target = { x: d.x + i * 0.02, y: d.y + i * 0.03, z: i * 0.01, rot: 0, scale: 0.85 };
+    seen.add(key);
   }
-  const drawLabel = makeLabelSprite(`Draw pile (${latest.drawCount})`);
-  drawLabel.position.set(-1.3, 0.5, 0.9);
-  pileGroup.add(drawLabel);
+  const deckClickable = isMyTurn && latest.phase === "draw";
+  label("deck", `Draw · ${latest.drawCount}`, d.x, d.y - CARD_H * 0.85 / 2 - 0.45, deckClickable ? "clickable green" : "", deckClickable ? () => send({ type: "drawPile" }) : null);
 
-  if (latest.discardTop) {
-    const mesh = makeCardMesh(latest.discardTop, true);
-    addDropShadow(mesh, 0.05, -0.05);
-    mesh.position.set(1.3, 0.03, 0);
-    mesh.rotation.x = -Math.PI / 2;
-    pileGroup.add(mesh);
+  // --- discard pile ---
+  const top = latest.discardTop;
+  if (top && (!discardHistory.length || discardHistory[discardHistory.length - 1].id !== top.id)) {
+    discardHistory.push({ ...top, rot: (Math.random() - 0.5) * 0.3, dx: (Math.random() - 0.5) * 0.12, dy: (Math.random() - 0.5) * 0.12 });
+    if (discardHistory.length > 4) discardHistory.shift();
   }
-  const discardLabel = makeLabelSprite("Discard");
-  discardLabel.position.set(1.3, 0.5, 0.9);
-  pileGroup.add(discardLabel);
+  const dp = discardPos();
+  discardHistory.forEach((c, i) => {
+    const key = `card:${c.id}`;
+    let e = cards.get(key) || spawnCard(key, c, spawnFrom);
+    e.dying = false; e.wobble = false;
+    e.tag = { discard: true };
+    e.target = { x: dp.x + c.dx, y: dp.y + c.dy, z: 0.5 + i * 0.01, rot: c.rot, scale: 0.85 };
+    seen.add(key);
+  });
+  label("discard", "Discard", dp.x, dp.y - CARD_H * 0.85 / 2 - 0.45, "");
+
+  for (const [key, e] of cards) if (!seen.has(key)) { e.dying = true; e.tag = {}; }
+  endLabels();
 }
 
-function opponents() {
-  return latest.players.filter((p) => p.id !== myId);
+function oppPos(idx, n) {
+  const y = halfH - (portrait ? 3.1 : 2.3);
+  const span = Math.min(halfW * 2 - (portrait ? 2.2 : 3.2), 3.2 * (n - 1));
+  const x = n === 1 ? 0 : -span / 2 + (span / (n - 1)) * idx;
+  return { x, y };
 }
 
+// ---------- Actions ----------
 function setActionPanel(buttons) {
   const panel = $("action-panel");
   panel.innerHTML = "";
@@ -484,59 +539,46 @@ function setActionPanel(buttons) {
     panel.appendChild(el);
   }
 }
-
-function showHint(text) {
-  let hint = document.querySelector(".hint");
-  if (!hint) {
-    hint = document.createElement("div");
-    hint.className = "hint";
-    $("hud").appendChild(hint);
-  }
-  hint.textContent = text;
-}
+function showHint(text) { document.querySelector(".hint").textContent = text; }
 
 function renderActionPanel(isMyTurn) {
-  if (latest.phase === "over") { setActionPanel([]); showHint(""); return; }
-  if (!isMyTurn) { setActionPanel([]); showHint(""); return; }
-
+  if (latest.phase === "over" || !isMyTurn) { setActionPanel([]); showHint(""); return; }
   if (latest.phase === "discard") {
     setActionPanel([]);
-    showHint("Click one of your cards to discard it.");
+    showHint("Tap one of your cards to discard it.");
   } else if (latest.phase === "extra") {
     showExtraDefault();
   } else if (latest.phase === "draw") {
-    showHint("Click an opponent to take a card, or the draw pile to draw.");
+    showHint("Tap a player to take a random card from them, or tap the draw pile.");
     setActionPanel([{ label: "Draw from pile", color: "green", onClick: () => send({ type: "drawPile" }) }]);
   }
 }
-
 function showExtraDefault() {
-  showHint("Click a player to ask them something, or skip your turn.");
+  showHint("Tap a player to ask them something, or skip.");
   setActionPanel([{ label: "Skip", color: "gold", onClick: () => send({ type: "skipAsk" }) }]);
 }
-
-// Clicking a player directly opens a menu of what to ask them — no
-// pre-arming a mode first, since a tap on a person is the whole gesture.
+function onOpponentClick(targetId) {
+  if (!latest || latest.currentPlayerId !== myId) return;
+  if (latest.phase === "extra") openPlayerMenu(targetId);
+  else if (latest.phase === "draw") send({ type: "drawFromPlayer", targetId });
+}
 function openPlayerMenu(targetId) {
   const target = latest.players.find((p) => p.id === targetId);
   if (!target) return;
-  showHint(`Ask ${target.name} something, or cancel.`);
+  showHint(`${target.name}: ask something, or skip the ask and take a random card.`);
   setActionPanel([
     { label: "Ask for a card", color: "blue", onClick: () => openRankPicker(targetId, target.name) },
     { label: "Ask their count", color: "red", onClick: () => send({ type: "askCount", targetId }) },
+    // skipAsk moves the server to the draw phase synchronously, so the take lands in the same tick
+    { label: "Take a random card", color: "green", onClick: () => { send({ type: "skipAsk" }); send({ type: "drawFromPlayer", targetId }); } },
     { label: "Cancel", onClick: showExtraDefault },
   ]);
 }
-
 function openRankPicker(targetId, targetName) {
   const panel = $("action-panel");
   panel.innerHTML = "";
   const rankSel = document.createElement("select");
-  RANKS.forEach((r) => {
-    const opt = document.createElement("option");
-    opt.value = r; opt.textContent = r;
-    rankSel.appendChild(opt);
-  });
+  RANKS.forEach((r) => { const o = document.createElement("option"); o.value = r; o.textContent = r; rankSel.appendChild(o); });
   const askBtn = document.createElement("button");
   askBtn.className = "action-btn blue";
   askBtn.textContent = `Ask ${targetName}`;
@@ -546,58 +588,51 @@ function openRankPicker(targetId, targetName) {
   cancelBtn.textContent = "Cancel";
   cancelBtn.addEventListener("click", showExtraDefault);
   panel.append(rankSel, askBtn, cancelBtn);
-  showHint(`Pick a rank, then confirm.`);
+  showHint("Pick a rank, then confirm.");
 }
 
-// ---------- Interaction: click own hand to discard, an opponent to act on them, or the pile to draw ----------
+// ---------- Pointer: hover lift + click ----------
 const raycaster = new THREE.Raycaster();
-const pointer = new THREE.Vector2();
+const ndc = new THREE.Vector2();
 
-canvas.addEventListener("click", (e) => {
+function entryAt(clientX, clientY) {
+  ndc.x = (clientX / window.innerWidth) * 2 - 1;
+  ndc.y = -(clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(ndc, camera);
+  pointerWorld.set(ndc.x * halfW, ndc.y * halfH);
+  const hits = raycaster.intersectObjects(cardLayer.children, true);
+  for (const h of hits) {
+    let o = h.object;
+    while (o && !o.userData.entry) o = o.parent;
+    if (o && !o.userData.entry.dying) return o.userData.entry;
+  }
+  return null;
+}
+
+function hoverable(e) {
+  if (!e || !latest) return false;
+  if (e.tag.myCard) return true;
+  if (latest.currentPlayerId !== myId) return false;
+  if (e.tag.opponentId && (latest.phase === "extra" || latest.phase === "draw")) return true;
+  if (e.tag.deck && latest.phase === "draw") return true;
+  return false;
+}
+
+canvas.addEventListener("pointermove", (ev) => {
+  const e = entryAt(ev.clientX, ev.clientY);
+  hoveredKey = hoverable(e) ? e.key : null;
+  canvas.style.cursor = hoveredKey && (latest.currentPlayerId === myId) ? "pointer" : "default";
+});
+canvas.addEventListener("pointerleave", () => { hoveredKey = null; });
+
+canvas.addEventListener("click", (ev) => {
   if (!latest || latest.currentPlayerId !== myId) return;
-  pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
-  pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
-  raycaster.setFromCamera(pointer, camera);
-
-  if (latest.phase === "discard") {
-    const myMeshes = handGroup.children.filter((m) => m.userData.myCard);
-    const hits = raycaster.intersectObjects(myMeshes, true);
-    if (hits.length) {
-      const group = findTagged(hits[0].object, "card");
-      if (group) send({ type: "discard", cardId: group.userData.card.id });
-    }
-    return;
-  }
-
-  if (latest.phase === "extra" || latest.phase === "draw") {
-    const opponentMeshes = handGroup.children.filter((m) => m.userData.opponentId !== undefined);
-    const hits = raycaster.intersectObjects(opponentMeshes, true);
-    if (hits.length) {
-      const target = findTagged(hits[0].object, "opponentId");
-      if (target) {
-        const targetId = target.userData.opponentId;
-        if (latest.phase === "extra") openPlayerMenu(targetId);
-        else send({ type: "drawFromPlayer", targetId });
-      }
-      return;
-    }
-  }
-
-  if (latest.phase === "draw") {
-    const pileHits = raycaster.intersectObjects(pileGroup.children, true);
-    if (pileHits.length) {
-      const obj = pileHits[0].object;
-      const worldPos = new THREE.Vector3();
-      obj.getWorldPosition(worldPos);
-      if (worldPos.x < 0) send({ type: "drawPile" });
-    }
-  }
+  const e = entryAt(ev.clientX, ev.clientY);
+  if (!e) return;
+  if (latest.phase === "discard" && e.tag.myCard) send({ type: "discard", cardId: e.tag.cardId });
+  else if (e.tag.opponentId) onOpponentClick(e.tag.opponentId);
+  else if (e.tag.deck && latest.phase === "draw") send({ type: "drawPile" });
 });
 
-function findTagged(obj, key) {
-  let o = obj;
-  while (o && (!o.userData || o.userData[key === "card" ? "card" : key] === undefined) && o.parent) o = o.parent;
-  if (!o || !o.userData) return null;
-  const val = key === "card" ? o.userData.card : o.userData[key];
-  return val !== undefined ? o : null;
-}
+resize();
+animate();

@@ -608,7 +608,7 @@ function renderTable(isMyTurn) {
   const hand = latest.you.hand;
   // portrait: sit the hand in the bottom quarter, but never closer than ~185px to the edge (room for the dock)
   const unitsPerPx = (2 * halfH) / window.innerHeight;
-  const handY = -halfH + (portrait ? Math.max(0.24 * (2 * halfH), 185 * unitsPerPx + CARD_H / 2) : 2.95);
+  const handY = -halfH + (portrait ? Math.max(0.24 * (2 * halfH), 185 * unitsPerPx + CARD_H / 2) : 3.35);
   const spacing = Math.min(1.65, (halfW * 2 - 1.2 - CARD_W) / Math.max(hand.length - 1, 1));
   const startX = -((hand.length - 1) * spacing) / 2;
   hand.forEach((card, i) => {
@@ -620,9 +620,7 @@ function renderTable(isMyTurn) {
     seen.add(key);
   });
   const total = hand.reduce((s, c) => s + cardValue(c), 0);
-  const handRight = startX + (hand.length - 1) * spacing + CARD_W / 2;
-  if (portrait) label("me", `${myName || "You"} · ${total}`, 0, handY + CARD_H / 2 + 0.6, total === 10 ? "gold" : "");
-  else label("me", `${myName || "You"} · ${total}`, Math.min(handRight + 1.1, halfW - 1.3), handY, total === 10 ? "gold" : "");
+  label("me", `${myName || "You"} · ${total}`, 0, handY - CARD_H / 2 - 0.5, total === 10 ? "gold" : "");
 
   // --- opponents ---
   opps.forEach((p, idx) => {

@@ -102,20 +102,53 @@ function getBackTexture() {
   roundRect(ctx, 24, 24, 208, 310, 12);
   ctx.stroke();
 
+  // portrait medallion: gold ring, filled once the photo has loaded
+  const CX = 128, CY = 160, R = 72;
   ctx.fillStyle = "#ffcd3c";
   ctx.strokeStyle = CARD_INK;
   ctx.lineWidth = 8;
   ctx.beginPath();
-  ctx.ellipse(128, 179, 82, 50, 0, 0, Math.PI * 2);
+  ctx.arc(CX, CY, R + 10, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+
+  ctx.fillStyle = "#ffcd3c";
+  ctx.strokeStyle = CARD_INK;
+  ctx.lineWidth = 6;
+  roundRect(ctx, 58, 262, 140, 44, 12);
   ctx.fill(); ctx.stroke();
   ctx.fillStyle = CARD_INK;
-  ctx.font = `700 40px ${CARD_FONT}`;
+  ctx.font = `700 30px ${CARD_FONT}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("BEN 10", 128, 181);
+  ctx.fillText("BEN 10", CX, 285);
 
   backTexture = new THREE.CanvasTexture(canvas);
   backTexture.colorSpace = THREE.SRGBColorSpace;
+
+  const img = new Image();
+  img.onload = () => {
+    // pixelate: shrink to a 24px grid, then blow back up with smoothing off
+    const small = document.createElement("canvas");
+    const N = 24;
+    small.width = N; small.height = N;
+    const s = small.getContext("2d");
+    const side = Math.min(img.width, img.height);
+    s.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, N, N);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(CX, CY, R, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(small, CX - R, CY - R, R * 2, R * 2);
+    ctx.restore();
+    ctx.strokeStyle = CARD_INK;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(CX, CY, R, 0, Math.PI * 2);
+    ctx.stroke();
+    backTexture.needsUpdate = true;
+  };
+  img.src = "bg.jpg";
   return backTexture;
 }
 

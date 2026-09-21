@@ -418,6 +418,36 @@ function showWaitingRoom(code) {
   $("chat").classList.remove("hidden");
 }
 
+function inviteLink(code) {
+  const url = new URL(location.href);
+  url.search = "";
+  url.searchParams.set("code", code);
+  return url.toString();
+}
+
+function flashCopied(btn, label) {
+  const prev = btn.textContent;
+  btn.textContent = label || "Copied!";
+  btn.disabled = true;
+  setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 1200);
+}
+
+$("room-code-display").addEventListener("click", async () => {
+  const btn = $("room-code-display");
+  try { await navigator.clipboard.writeText(btn.textContent); flashCopied(btn, "Copied!"); } catch {}
+});
+$("copy-link-btn").addEventListener("click", async () => {
+  const btn = $("copy-link-btn");
+  try {
+    await navigator.clipboard.writeText(inviteLink($("room-code-display").textContent));
+    flashCopied(btn, "Link copied!");
+  } catch {}
+});
+
+// Auto-fill join code from a shared invite link (?code=XXXX)
+const inviteCode = new URLSearchParams(location.search).get("code");
+if (inviteCode) $("code-input").value = inviteCode.toUpperCase();
+
 // Log entries are strings (game events) or {chat, from, text}. Re-render when the tail changes.
 let renderedLogKey = "";
 function renderLog() {

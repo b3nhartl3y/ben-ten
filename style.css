@@ -233,7 +233,15 @@ html, body {
   color: var(--gold);
   text-shadow: 4px 4px 0 var(--outline);
   margin: 10px 0 20px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: block;
+  width: 100%;
 }
+.room-code:active { transform: translateY(2px); }
+#copy-link-btn { width: auto; margin: 0 auto 20px; padding: 10px 20px; }
 
 .player-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .player-row {

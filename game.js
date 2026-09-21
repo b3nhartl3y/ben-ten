@@ -160,12 +160,17 @@ camera.lookAt(0, 0, 0);
 // Balatro-style paint swirl. Ported from the well-known Shadertoy recreation.
 const bgMat = new THREE.ShaderMaterial({
   depthWrite: false,
-  uniforms: { uTime: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) } },
+  uniforms: {
+    uTime: { value: 0 },
+    uRes: { value: new THREE.Vector2(1, 1) },
+    uImg: { value: new THREE.TextureLoader().load("bg.jpg", (t) => { t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.MirroredRepeatWrapping; }) },
+    uImgAspect: { value: 284 / 286 },
+  },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
   fragmentShader: `
     precision highp float;
     varying vec2 vUv;
-    uniform float uTime; uniform vec2 uRes;
+    uniform float uTime; uniform vec2 uRes; uniform sampler2D uImg; uniform float uImgAspect;
     const vec4 C1 = vec4(0.871, 0.267, 0.231, 1.0);
     const vec4 C2 = vec4(0.0, 0.42, 0.706, 1.0);
     const vec4 C3 = vec4(0.086, 0.137, 0.145, 1.0);
@@ -193,11 +198,19 @@ const bgMat = new THREE.ShaderMaterial({
       float c2p = max(0.0, 1.0 - cm * abs(paint));
       float c3p = 1.0 - min(1.0, c1p + c2p);
       float light = (LIGHTING - 0.2) * max(c1p * 5.0 - 4.0, 0.0) + LIGHTING * max(c2p * 5.0 - 4.0, 0.0);
-      vec4 col = (0.3 / CONTRAST) * C1 + (1.0 - 0.3 / CONTRAST) * (C1 * c1p + C2 * c2p + vec4(c3p * C3.rgb, c3p)) + light;
-      // dim + slight desaturate so cards pop off it
-      vec3 rgb = col.rgb * 0.95;
-      float g = dot(rgb, vec3(0.299, 0.587, 0.114));
-      gl_FragColor = vec4(mix(vec3(g), rgb, 0.9), 1.0);
+      vec4 ink = (0.3 / CONTRAST) * C1 + (1.0 - 0.3 / CONTRAST) * (C1 * c1p + C2 * c2p + vec4(c3p * C3.rgb, c3p)) + light;
+
+      // Photo, object-fit: cover, then liquefied by the swirl field and slowly drifting
+      float screenAspect = uRes.x / uRes.y;
+      vec2 iuv = vUv - 0.5;
+      if (screenAspect > uImgAspect) iuv.y *= uImgAspect / screenAspect; else iuv.x *= screenAspect / uImgAspect;
+      vec2 warp = vec2(c1p - c2p, c3p - 0.5) * 0.03 + 0.012 * vec2(sin(uTime * 0.3 + iuv.y * 5.0), cos(uTime * 0.25 + iuv.x * 5.0));
+      vec3 photo = texture2D(uImg, iuv + 0.5 + warp).rgb;
+
+      // paint tints and shades the photo so it still reads as the Balatro swirl
+      vec3 rgb = photo * (0.45 + 0.7 * ink.rgb);
+      rgb = mix(rgb, ink.rgb, 0.3) * 0.62;
+      gl_FragColor = vec4(rgb, 1.0);
     }`,
 });
 const bg = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bgMat);

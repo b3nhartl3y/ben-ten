@@ -209,11 +209,27 @@ const pixelPass = new RenderPixelatedPass(2, scene, camera, { normalEdgeStrength
 composer.addPass(pixelPass);
 composer.addPass(new OutputPass());
 
+// Perspective FOV is vertical, so a narrow portrait screen (small aspect)
+// crops the table horizontally unless we widen the vertical FOV to
+// compensate — this keeps the horizontal field of view roughly constant
+// across phone/tablet/desktop instead of zooming in on tall screens.
+const TARGET_HORIZONTAL_FOV = 62;
+const BASE_VERTICAL_FOV = 45;
+
 function resize() {
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  camera.aspect = window.innerWidth / window.innerHeight;
+  const w = window.innerWidth, h = window.innerHeight;
+  const aspect = w / h;
+  if (aspect < 1) {
+    const hFovRad = THREE.MathUtils.degToRad(TARGET_HORIZONTAL_FOV);
+    const vFovRad = 2 * Math.atan(Math.tan(hFovRad / 2) / aspect);
+    camera.fov = Math.min(THREE.MathUtils.radToDeg(vFovRad), 100);
+  } else {
+    camera.fov = BASE_VERTICAL_FOV;
+  }
+  camera.aspect = aspect;
   camera.updateProjectionMatrix();
-  composer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(w, h);
+  composer.setSize(w, h);
 }
 window.addEventListener("resize", resize);
 resize();
@@ -479,13 +495,7 @@ function showHint(text) {
   hint.textContent = text;
 }
 
-// What clicking a player's cards/name does right now: null (nothing armed),
-// "take" (draw phase — take a card from whoever is clicked), "count" (ask
-// their total), or "card" (ask if they hold a chosen rank).
-let armedAction = null;
-
 function renderActionPanel(isMyTurn) {
-  armedAction = null;
   if (latest.phase === "over") { setActionPanel([]); showHint(""); return; }
   if (!isMyTurn) { setActionPanel([]); showHint(""); return; }
 
@@ -495,29 +505,30 @@ function renderActionPanel(isMyTurn) {
   } else if (latest.phase === "extra") {
     showExtraDefault();
   } else if (latest.phase === "draw") {
-    armedAction = { type: "take" };
     showHint("Click an opponent to take a card, or the draw pile to draw.");
     setActionPanel([{ label: "Draw from pile", color: "green", onClick: () => send({ type: "drawPile" }) }]);
   }
 }
 
 function showExtraDefault() {
-  armedAction = null;
-  showHint("Optional: ask a question before you draw.");
+  showHint("Click a player to ask them something, or skip your turn.");
+  setActionPanel([{ label: "Skip", color: "gold", onClick: () => send({ type: "skipAsk" }) }]);
+}
+
+// Clicking a player directly opens a menu of what to ask them — no
+// pre-arming a mode first, since a tap on a person is the whole gesture.
+function openPlayerMenu(targetId) {
+  const target = latest.players.find((p) => p.id === targetId);
+  if (!target) return;
+  showHint(`Ask ${target.name} something, or cancel.`);
   setActionPanel([
-    { label: "Ask for a card", color: "blue", onClick: armAskCard },
-    { label: "Ask for a count", color: "red", onClick: armAskCount },
-    { label: "Skip", color: "gold", onClick: () => send({ type: "skipAsk" }) },
+    { label: "Ask for a card", color: "blue", onClick: () => openRankPicker(targetId, target.name) },
+    { label: "Ask their count", color: "red", onClick: () => send({ type: "askCount", targetId }) },
+    { label: "Cancel", onClick: showExtraDefault },
   ]);
 }
 
-function armAskCount() {
-  armedAction = { type: "count" };
-  showHint("Click a player to ask their count.");
-  setActionPanel([{ label: "Cancel", onClick: showExtraDefault }]);
-}
-
-function armAskCard() {
+function openRankPicker(targetId, targetName) {
   const panel = $("action-panel");
   panel.innerHTML = "";
   const rankSel = document.createElement("select");
@@ -526,13 +537,16 @@ function armAskCard() {
     opt.value = r; opt.textContent = r;
     rankSel.appendChild(opt);
   });
+  const askBtn = document.createElement("button");
+  askBtn.className = "action-btn blue";
+  askBtn.textContent = `Ask ${targetName}`;
+  askBtn.addEventListener("click", () => send({ type: "askCard", targetId, rank: rankSel.value }));
   const cancelBtn = document.createElement("button");
   cancelBtn.className = "action-btn";
   cancelBtn.textContent = "Cancel";
   cancelBtn.addEventListener("click", showExtraDefault);
-  panel.append(rankSel, cancelBtn);
-  armedAction = { type: "card", getRank: () => rankSel.value };
-  showHint("Pick a rank, then click a player to ask.");
+  panel.append(rankSel, askBtn, cancelBtn);
+  showHint(`Pick a rank, then confirm.`);
 }
 
 // ---------- Interaction: click own hand to discard, an opponent to act on them, or the pile to draw ----------
@@ -555,17 +569,21 @@ canvas.addEventListener("click", (e) => {
     return;
   }
 
-  if (armedAction && (latest.phase === "extra" || latest.phase === "draw")) {
+  if (latest.phase === "extra" || latest.phase === "draw") {
     const opponentMeshes = handGroup.children.filter((m) => m.userData.opponentId !== undefined);
     const hits = raycaster.intersectObjects(opponentMeshes, true);
     if (hits.length) {
       const target = findTagged(hits[0].object, "opponentId");
-      if (target) actOnPlayer(target.userData.opponentId);
+      if (target) {
+        const targetId = target.userData.opponentId;
+        if (latest.phase === "extra") openPlayerMenu(targetId);
+        else send({ type: "drawFromPlayer", targetId });
+      }
       return;
     }
   }
 
-  if (armedAction?.type === "take" && latest.phase === "draw") {
+  if (latest.phase === "draw") {
     const pileHits = raycaster.intersectObjects(pileGroup.children, true);
     if (pileHits.length) {
       const obj = pileHits[0].object;
@@ -575,13 +593,6 @@ canvas.addEventListener("click", (e) => {
     }
   }
 });
-
-function actOnPlayer(targetId) {
-  if (!armedAction) return;
-  if (armedAction.type === "take") send({ type: "drawFromPlayer", targetId });
-  else if (armedAction.type === "count") send({ type: "askCount", targetId });
-  else if (armedAction.type === "card") send({ type: "askCard", targetId, rank: armedAction.getRank() });
-}
 
 function findTagged(obj, key) {
   let o = obj;

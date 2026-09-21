@@ -261,11 +261,18 @@ body::before {
 
 #hud.hidden { display: none; }
 
-#turn-indicator {
+#top-bar {
   position: fixed;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: max(16px, env(safe-area-inset-top, 0px));
+  right: 16px;
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+#turn-indicator {
   background: var(--panel);
   border: 3px solid var(--gold);
   border-radius: 12px;
@@ -275,14 +282,13 @@ body::before {
   font-size: 1.1em;
   color: var(--gold);
   box-shadow: 0 5px 0 rgba(0,0,0,0.35);
+  align-self: center;
 }
 
 #log {
-  position: fixed;
-  top: 16px;
-  right: 16px;
   width: 280px;
-  max-height: 220px;
+  max-width: 100%;
+  max-height: 160px;
   overflow-y: auto;
   background: var(--panel);
   border: 3px solid var(--panel-border);
@@ -300,7 +306,7 @@ body::before {
 
 #bottom-dock {
   position: fixed;
-  bottom: 24px;
+  bottom: max(24px, env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   display: flex;

@@ -655,8 +655,6 @@ function renderTable(isMyTurn) {
     e.target = { x: d.x + i * 0.02, y: d.y + i * 0.03, z: i * 0.01, rot: 0, scale: 0.88 };
     seen.add(key);
   }
-  const deckClickable = isMyTurn && (latest.phase === "draw" || latest.phase === "extra");
-  label("deck", `Draw · ${latest.drawCount}`, d.x, d.y - CARD_H * 0.88 / 2 - 0.45, deckClickable ? "clickable green" : "", deckClickable ? drawFromPile : null);
 
   // --- discard pile ---
   const top = latest.discardTop;
@@ -673,7 +671,6 @@ function renderTable(isMyTurn) {
     e.target = { x: dp.x + c.dx, y: dp.y + c.dy, z: 0.5 + i * 0.01, rot: c.rot, scale: 0.88 };
     seen.add(key);
   });
-  label("discard", "Discard", dp.x, dp.y - CARD_H * 0.88 / 2 - 0.45, "");
 
   for (const [key, e] of cards) if (!seen.has(key)) { e.dying = true; e.tag = {}; }
   endLabels();

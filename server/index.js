@@ -85,6 +85,9 @@ function newRoom(hostId) {
   };
 }
 
+let announceSeq = 0;
+function announce(room, text) { room.announce = { id: ++announceSeq, text }; }
+
 function log(room, msg) {
   room.log.push(msg);
   if (room.log.length > 60) room.log.shift();
@@ -116,6 +119,7 @@ function broadcast(room) {
       drawCount: room.drawPile.length,
       log: room.log.slice(-40),
       winnerId: room.winnerId,
+      announce: room.announce || null,
       winnerHand: room.phase === "over" ? (room.players.find((x) => x.id === room.winnerId) || {}).hand || null : null,
     };
     p.ws.send(JSON.stringify(payload));
@@ -166,10 +170,45 @@ function chooseBotDiscard(hand) {
   return best;
 }
 
-// ponytail: bots always skip the ask step and pick a blind action; keeps AI simple
+// ---------- Bot memory: grudges + trash talk ----------
+// Each bot keeps a grudge score per player. Being robbed or interrogated raises it,
+// it decays every bot turn, and it weights who the bot goes after next.
+function holdGrudge(bot, againstId, amount) {
+  if (!bot.isBot || bot.id === againstId) return;
+  bot.grudges = bot.grudges || {};
+  bot.grudges[againstId] = (bot.grudges[againstId] || 0) + amount;
+}
+
+const TAUNTS = {
+  robbed: ["Oi, {n}. I saw that.", "Really, {n}?", "Noted, {n}.", "Hands off, {n}."],
+  counted: ["Mind your own hand, {n}.", "Why so nosy, {n}?"],
+  revenge: ["That's for earlier, {n}.", "Payback, {n}.", "Remember me, {n}?", "Told you I'd be back, {n}.", "Karma, {n}."],
+  gloat: ["Thanks for the card, {n}.", "I'll take that, {n}."],
+};
+function taunt(room, bot, kind, target) {
+  const lines = TAUNTS[kind];
+  const text = lines[Math.floor(Math.random() * lines.length)].replace("{n}", target.name);
+  log(room, { chat: true, from: bot.name, text });
+}
+
+// Weighted pick: revenge first, then whoever looks closest to winning, then chance.
+function pickTarget(bot, others) {
+  const weights = others.map((o) => {
+    const grudge = (bot.grudges || {})[o.id] || 0;
+    const known = (bot.known || {})[o.id];
+    const threat = known ? Math.max(0, (20 - known) / 6) : 0.5;
+    return 1 + grudge * 1.6 + threat;
+  });
+  let r = Math.random() * weights.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < others.length; i++) { r -= weights[i]; if (r <= 0) return others[i]; }
+  return others[others.length - 1];
+}
+
 function runBotTurn(room, index) {
   const p = room.players[index];
   if (room.phase !== "discard" || room.currentPlayer !== index) return;
+  p.grudges = p.grudges || {}; p.known = p.known || {};
+  for (const id in p.grudges) { p.grudges[id] *= 0.75; if (p.grudges[id] < 0.2) delete p.grudges[id]; }
 
   const discardIdx = chooseBotDiscard(p.hand);
   const [discarded] = p.hand.splice(discardIdx, 1);
@@ -179,25 +218,29 @@ function runBotTurn(room, index) {
   broadcast(room);
 
   const others = room.players.filter((x, i) => i !== index && x.hand.length > 0);
-  let preferred = null; // opponent the bot learned something useful about
+  let preferred = null; // opponent the bot learned something useful about this turn
 
   // Optional extra move: ask someone for a rank the bot needs, or ask them to count.
   setTimeout(() => {
     if (others.length && Math.random() < 0.65) {
-      const target = others[Math.floor(Math.random() * others.length)];
+      const target = pickTarget(p, others);
       if (Math.random() < 0.6) {
-        // rank that would make 10 if it replaced one of our cards
         const total = handTotal(p.hand);
         const swap = p.hand[Math.floor(Math.random() * p.hand.length)];
         const need = Math.min(10, Math.max(1, 10 - (total - swap.value)));
         const rank = need === 1 ? "A" : String(need);
         const has = target.hand.some((c) => c.rank === rank);
         log(room, `${p.name} asked ${target.name}: "Do you have a ${rank}?" — ${has ? "Yes" : "No"}.`);
+        announce(room, `${has ? "YES" : "NO"} — ${target.name} ${has ? "has" : "has no"} ${rank === "A" ? "Ace" : rank}`);
         if (has) preferred = target;
+        holdGrudge(target, p.id, 0.5);
       } else {
         const total = handTotal(target.hand);
         log(room, `${p.name} asked ${target.name} to count — total is ${total}.`);
-        if (total <= 14) preferred = target; // low hand = small cards worth stealing
+        announce(room, `${target.name}'s hand totals ${total}`);
+        p.known[target.id] = total;
+        if (total <= 14) preferred = target;
+        holdGrudge(target, p.id, 1);
       }
     }
     room.phase = "draw";
@@ -205,13 +248,19 @@ function runBotTurn(room, index) {
   }, 900);
 
   setTimeout(() => {
-    const takeFromOpponent = preferred ? Math.random() < 0.8 : Math.random() < 0.3;
-    if (takeFromOpponent && others.length) {
-      const target = preferred || others[Math.floor(Math.random() * others.length)];
+    const topGrudge = Math.max(0, ...others.map((o) => p.grudges[o.id] || 0));
+    const takeChance = preferred ? 0.8 : Math.min(0.9, 0.3 + topGrudge * 0.25);
+    if (others.length && Math.random() < takeChance) {
+      const target = preferred || pickTarget(p, others);
       const idx = Math.floor(Math.random() * target.hand.length);
       const [card] = target.hand.splice(idx, 1);
       p.hand.push(card);
       log(room, `${p.name} took a card from ${target.name}.`);
+      if (p.known[target.id] !== undefined) p.known[target.id] -= card.value;
+      const grudge = p.grudges[target.id] || 0;
+      if (grudge >= 1.5) { taunt(room, p, "revenge", target); p.grudges[target.id] = grudge * 0.4; }
+      else if (Math.random() < 0.35) taunt(room, p, "gloat", target);
+      holdGrudge(target, p.id, 2);
     } else {
       if (room.drawPile.length === 0) refillDrawPile(room);
       if (room.drawPile.length) p.hand.push(room.drawPile.pop());
@@ -336,6 +385,8 @@ function handleMessage(ws, msg) {
     if (!target) return;
     const has = target.hand.some((c) => c.rank === msg.rank);
     log(room, `${me.name} asked ${target.name}: "Do you have a ${msg.rank}?" — ${has ? "Yes" : "No"}.`);
+    announce(room, `${has ? "YES" : "NO"} — ${target.name} ${has ? "has" : "has no"} ${msg.rank === "A" ? "Ace" : msg.rank}`);
+    holdGrudge(target, me.id, 0.5);
     room.phase = "draw";
     broadcast(room);
     return;
@@ -345,6 +396,9 @@ function handleMessage(ws, msg) {
     const target = room.players.find((x) => x.id === msg.targetId);
     if (!target) return;
     log(room, `${me.name} asked ${target.name} to count — total is ${handTotal(target.hand)}.`);
+    announce(room, `${target.name}'s hand totals ${handTotal(target.hand)}`);
+    holdGrudge(target, me.id, 1);
+    if (target.isBot && Math.random() < 0.4) taunt(room, target, "counted", me);
     room.phase = "draw";
     broadcast(room);
     return;
@@ -367,6 +421,8 @@ function handleMessage(ws, msg) {
     const [card] = target.hand.splice(idx, 1);
     me.hand.push(card);
     log(room, `${me.name} took a card from ${target.name}.`);
+    holdGrudge(target, me.id, 2);
+    if (target.isBot && Math.random() < 0.5) taunt(room, target, "robbed", me);
     broadcast(room);
     finishTurnAndAdvance(room, myIndex);
     return;

@@ -339,6 +339,34 @@ html, body {
   50% { text-shadow: 3px 3px 0 var(--outline), -2px -2px 0 var(--outline), 2px -2px 0 var(--outline), -2px 2px 0 var(--outline), 0 0 18px rgba(255, 205, 60, 0.8); }
 }
 
+/* ---- announcement banner: count results and yes/no answers, for everyone ---- */
+#announce {
+  position: fixed;
+  top: calc(max(14px, env(safe-area-inset-top, 0px)) + 58px);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 92vw;
+  padding: 10px 26px;
+  background: var(--gold);
+  color: var(--gold-ink);
+  border: 3px solid var(--outline);
+  border-radius: 14px;
+  font-family: var(--pixel);
+  font-weight: 700;
+  font-size: clamp(1.1em, 3.6vw, 1.6em);
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 6px 0 var(--outline);
+  animation: slam 0.35s cubic-bezier(.2,1.5,.4,1) both;
+  z-index: 7;
+}
+#announce.hidden { display: none; }
+#announce.no { background: var(--red); color: #350807; }
+@keyframes slam {
+  from { transform: translateX(-50%) scale(1.6); opacity: 0; }
+  to { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+
 /* ---- chat / event feed ---- */
 #chat {
   position: fixed;

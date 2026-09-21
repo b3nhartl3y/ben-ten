@@ -277,6 +277,7 @@ const cardLayer = new THREE.Group();
 scene.add(cardLayer);
 const clock = new THREE.Clock();
 let hoveredKey = null;
+let preselect = null; // card id queued for discard before our turn
 const pointerWorld = new THREE.Vector2();
 
 function spawnCard(key, card, from) {
@@ -301,7 +302,8 @@ function animate() {
   for (const [key, e] of cards) {
     const g = e.group, tg = e.target;
     const hovered = key === hoveredKey && !e.dying;
-    const ty = tg.y + (hovered ? 0.35 : 0) + (e.wobble ? Math.sin(t * 1.6 + e.phase) * 0.04 : 0);
+    const queued = preselect !== null && e.tag.cardId === preselect;
+    const ty = tg.y + (hovered ? 0.35 : queued ? 0.5 : 0) + (e.wobble ? Math.sin(t * 1.6 + e.phase) * 0.04 : 0);
     const ts = e.dying ? 0 : tg.scale * (hovered ? 1.1 : 1);
     const tz = hovered ? 3 : tg.z;
     const k = 0.16;
@@ -473,8 +475,16 @@ function render() {
   ti.textContent = latest.phase === "over" ? "Game over" : isMyTurn ? "Your turn" : `${current ? current.name : "…"}'s turn`;
   ti.classList.toggle("mine", isMyTurn && latest.phase !== "over");
 
+  renderAnnounce();
   renderTable(isMyTurn);
   renderActionPanel(isMyTurn);
+
+  // Pre-selected discard: fire it the moment our discard step opens.
+  if (isMyTurn && latest.phase === "discard" && preselect !== null) {
+    const still = latest.you.hand.find((c) => c.id === preselect);
+    preselect = null;
+    if (still) send({ type: "discard", cardId: still.id });
+  }
 
   if (latest.phase === "over" && $("win-screen").classList.contains("hidden")) {
     const winner = latest.players.find((p) => p.id === latest.winnerId);
@@ -486,6 +496,21 @@ function render() {
     $("win-screen").classList.remove("hidden");
     startConfetti();
   }
+}
+
+// ---------- Announcement banner ----------
+let shownAnnounce = 0, announceTimer = null;
+function renderAnnounce() {
+  const a = latest.announce;
+  if (!a || a.id === shownAnnounce) return;
+  shownAnnounce = a.id;
+  const el = $("announce");
+  el.textContent = a.text;
+  el.classList.toggle("no", a.text.startsWith("NO"));
+  el.classList.remove("hidden");
+  el.style.animation = "none"; void el.offsetWidth; el.style.animation = ""; // restart slam
+  clearTimeout(announceTimer);
+  announceTimer = setTimeout(() => el.classList.add("hidden"), 4500);
 }
 
 // ---------- Confetti ----------
@@ -756,9 +781,18 @@ canvas.addEventListener("pointermove", (ev) => {
 canvas.addEventListener("pointerleave", () => { hoveredKey = null; });
 
 canvas.addEventListener("click", (ev) => {
-  if (!latest || latest.currentPlayerId !== myId) return;
+  if (!latest || latest.phase === "lobby" || latest.phase === "over") return;
   const e = entryAt(ev.clientX, ev.clientY);
   if (!e) return;
+  const myTurn = latest.currentPlayerId === myId;
+  // Not our discard step yet: tapping a hand card queues it (tap again to unqueue).
+  if (e.tag.myCard && !(myTurn && latest.phase === "discard")) {
+    preselect = preselect === e.tag.cardId ? null : e.tag.cardId;
+    const card = latest.you.hand.find((c) => c.id === preselect);
+    if (!myTurn) showHint(card ? `${card.rank}${card.symbol} will be discarded when your turn starts. Tap it again to cancel.` : "");
+    return;
+  }
+  if (!myTurn) return;
   if (latest.phase === "discard" && e.tag.myCard) send({ type: "discard", cardId: e.tag.cardId });
   else if (e.tag.opponentId) onOpponentClick(e.tag.opponentId);
   else if (e.tag.deck && (latest.phase === "draw" || latest.phase === "extra")) drawFromPile();

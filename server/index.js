@@ -149,6 +149,9 @@ function finishTurnAndAdvance(room, index) {
     broadcast(room);
     return;
   }
+  // Lock the turn while the advance is pending, otherwise a second tap in that window draws again.
+  room.phase = "resolving";
+  broadcast(room);
   const next = (index + 1) % room.players.length;
   setTimeout(() => beginTurn(room, next), 500);
 }
@@ -172,14 +175,39 @@ function runBotTurn(room, index) {
   const [discarded] = p.hand.splice(discardIdx, 1);
   room.discardPile.push(discarded);
   log(room, `${p.name} discarded a card.`);
-  room.phase = "draw";
+  room.phase = "extra";
   broadcast(room);
 
+  const others = room.players.filter((x, i) => i !== index && x.hand.length > 0);
+  let preferred = null; // opponent the bot learned something useful about
+
+  // Optional extra move: ask someone for a rank the bot needs, or ask them to count.
   setTimeout(() => {
-    const takeFromOpponent = Math.random() < 0.3;
-    const others = room.players.filter((x, i) => i !== index && x.hand.length > 0);
-    if (takeFromOpponent && others.length) {
+    if (others.length && Math.random() < 0.65) {
       const target = others[Math.floor(Math.random() * others.length)];
+      if (Math.random() < 0.6) {
+        // rank that would make 10 if it replaced one of our cards
+        const total = handTotal(p.hand);
+        const swap = p.hand[Math.floor(Math.random() * p.hand.length)];
+        const need = Math.min(10, Math.max(1, 10 - (total - swap.value)));
+        const rank = need === 1 ? "A" : String(need);
+        const has = target.hand.some((c) => c.rank === rank);
+        log(room, `${p.name} asked ${target.name}: "Do you have a ${rank}?" — ${has ? "Yes" : "No"}.`);
+        if (has) preferred = target;
+      } else {
+        const total = handTotal(target.hand);
+        log(room, `${p.name} asked ${target.name} to count — total is ${total}.`);
+        if (total <= 14) preferred = target; // low hand = small cards worth stealing
+      }
+    }
+    room.phase = "draw";
+    broadcast(room);
+  }, 900);
+
+  setTimeout(() => {
+    const takeFromOpponent = preferred ? Math.random() < 0.8 : Math.random() < 0.3;
+    if (takeFromOpponent && others.length) {
+      const target = preferred || others[Math.floor(Math.random() * others.length)];
       const idx = Math.floor(Math.random() * target.hand.length);
       const [card] = target.hand.splice(idx, 1);
       p.hand.push(card);
@@ -190,7 +218,7 @@ function runBotTurn(room, index) {
     }
     broadcast(room);
     finishTurnAndAdvance(room, index);
-  }, 900);
+  }, 1900);
 }
 
 // ---------- WebSocket protocol ----------

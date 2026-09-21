@@ -290,8 +290,8 @@ function spawnCard(key, card, from) {
   return entry;
 }
 
-function deckPos() { return { x: -1.25, y: portrait ? 1.2 : 0.35 }; }
-function discardPos() { return { x: 1.25, y: portrait ? 1.2 : 0.35 }; }
+function deckPos() { return { x: -1.25, y: portrait ? 1.2 : 0.85 }; }
+function discardPos() { return { x: 1.25, y: portrait ? 1.2 : 0.85 }; }
 
 function animate() {
   requestAnimationFrame(animate);
@@ -546,14 +546,14 @@ function renderWinTable() {
   const seen = new Set();
   beginLabels();
   const hand = latest.winnerHand || [];
-  const scale = portrait ? Math.min(1.15, (halfW * 2 - 0.8) / (hand.length * CARD_W * 1.05)) : 1.35;
+  const scale = portrait ? Math.min(1.1, (halfW * 2 - 0.8) / (hand.length * CARD_W * 1.05)) : 1.15;
   const spacing = CARD_W * scale * 1.08;
   const startX = -((hand.length - 1) * spacing) / 2;
   hand.forEach((card, i) => {
     const key = `card:${card.id}`;
     const e = cards.get(key) || spawnCard(key, card, { x: 0, y: halfH + 3 });
     e.dying = false; e.wobble = true; e.tag = {};
-    e.target = { x: startX + i * spacing, y: 0.6, z: 1 + i * 0.01, rot: (i - (hand.length - 1) / 2) * -0.06, scale };
+    e.target = { x: startX + i * spacing, y: portrait ? 1.2 : 0.4, z: 1 + i * 0.01, rot: (i - (hand.length - 1) / 2) * -0.06, scale };
     seen.add(key);
   });
   for (const [key, e] of cards) if (!seen.has(key)) { e.dying = true; e.tag = {}; }
@@ -598,7 +598,7 @@ function renderTable(isMyTurn) {
   // --- opponents ---
   opps.forEach((p, idx) => {
     const pos = oppPos(idx, opps.length);
-    const n = p.count, s = portrait ? 0.5 : 0.62, sp = portrait ? 0.2 : 0.28;
+    const n = p.count, s = portrait ? 0.55 : 0.74, sp = portrait ? 0.22 : 0.34;
     const sx = -((n - 1) * sp) / 2;
     for (let i = 0; i < n; i++) {
       const key = `opp:${p.id}:${i}`;
@@ -623,11 +623,11 @@ function renderTable(isMyTurn) {
     let e = cards.get(key) || spawnCard(key, null, d);
     e.dying = false; e.wobble = false;
     e.tag = { deck: true };
-    e.target = { x: d.x + i * 0.02, y: d.y + i * 0.03, z: i * 0.01, rot: 0, scale: 0.85 };
+    e.target = { x: d.x + i * 0.02, y: d.y + i * 0.03, z: i * 0.01, rot: 0, scale: 0.88 };
     seen.add(key);
   }
   const deckClickable = isMyTurn && (latest.phase === "draw" || latest.phase === "extra");
-  label("deck", `Draw · ${latest.drawCount}`, d.x, d.y - CARD_H * 0.85 / 2 - 0.45, deckClickable ? "clickable green" : "", deckClickable ? drawFromPile : null);
+  label("deck", `Draw · ${latest.drawCount}`, d.x, d.y - CARD_H * 0.88 / 2 - 0.45, deckClickable ? "clickable green" : "", deckClickable ? drawFromPile : null);
 
   // --- discard pile ---
   const top = latest.discardTop;
@@ -641,17 +641,17 @@ function renderTable(isMyTurn) {
     let e = cards.get(key) || spawnCard(key, c, spawnFrom);
     e.dying = false; e.wobble = false;
     e.tag = { discard: true };
-    e.target = { x: dp.x + c.dx, y: dp.y + c.dy, z: 0.5 + i * 0.01, rot: c.rot, scale: 0.85 };
+    e.target = { x: dp.x + c.dx, y: dp.y + c.dy, z: 0.5 + i * 0.01, rot: c.rot, scale: 0.88 };
     seen.add(key);
   });
-  label("discard", "Discard", dp.x, dp.y - CARD_H * 0.85 / 2 - 0.45, "");
+  label("discard", "Discard", dp.x, dp.y - CARD_H * 0.88 / 2 - 0.45, "");
 
   for (const [key, e] of cards) if (!seen.has(key)) { e.dying = true; e.tag = {}; }
   endLabels();
 }
 
 function oppPos(idx, n) {
-  const y = halfH - (portrait ? 3.1 : 2.3);
+  const y = halfH - (portrait ? 3.1 : 2.1);
   const span = Math.min(halfW * 2 - (portrait ? 2.2 : 3.2), 3.2 * (n - 1));
   const x = n === 1 ? 0 : -span / 2 + (span / (n - 1)) * idx;
   return { x, y };

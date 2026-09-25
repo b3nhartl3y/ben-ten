@@ -80,39 +80,43 @@ function getBackTexture() {
   const canvas = newCardCanvas();
   const ctx = canvas.getContext("2d");
 
-  ctx.fillStyle = "#d9b273";
+  ctx.fillStyle = "#3b6fd6";
   roundRect(ctx, 6, 6, 244, 346, 20);
   ctx.fill();
   ctx.save();
   roundRect(ctx, 6, 6, 244, 346, 20);
   ctx.clip();
-  ctx.strokeStyle = "rgba(120,80,30,0.16)";
-  ctx.lineWidth = 3;
-  for (let x = -358; x < 256 + 358; x += 14) {
+  ctx.strokeStyle = "rgba(255,255,255,0.22)";
+  ctx.lineWidth = 6;
+  for (let x = -358; x < 256 + 358; x += 34) {
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 358, 358); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(x, 358); ctx.lineTo(x + 358, 0); ctx.stroke();
   }
   ctx.restore();
-  ctx.strokeStyle = "#f3e6c8";
-  ctx.lineWidth = 8;
+  ctx.strokeStyle = CARD_INK;
+  ctx.lineWidth = 10;
   roundRect(ctx, 6, 6, 244, 346, 20);
   ctx.stroke();
-  ctx.strokeStyle = "rgba(90,60,20,0.35)";
-  ctx.lineWidth = 3;
-  roundRect(ctx, 22, 22, 212, 314, 12);
+  ctx.strokeStyle = "#f8f2e4";
+  ctx.lineWidth = 5;
+  roundRect(ctx, 24, 24, 208, 310, 12);
   ctx.stroke();
 
   // portrait medallion: gold ring, filled once the photo has loaded
   const CX = 128, CY = 160, R = 72;
-  ctx.fillStyle = "#2c2a22";
+  ctx.fillStyle = "#ffcd3c";
+  ctx.strokeStyle = CARD_INK;
+  ctx.lineWidth = 8;
   ctx.beginPath();
-  ctx.arc(CX, CY, R + 8, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.arc(CX, CY, R + 10, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
 
-  ctx.fillStyle = "#2c2a22";
+  ctx.fillStyle = "#ffcd3c";
+  ctx.strokeStyle = CARD_INK;
+  ctx.lineWidth = 6;
   roundRect(ctx, 58, 262, 140, 44, 12);
-  ctx.fill();
-  ctx.fillStyle = "#d9b273";
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = CARD_INK;
   ctx.font = `700 30px ${CARD_FONT}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -188,57 +192,83 @@ const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
 camera.position.set(0, 0, 20);
 camera.lookAt(0, 0, 0);
 
-// Background + oval felt table, painted into one canvas and redrawn on resize.
-const bg = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ depthWrite: false }));
+// Balatro-style paint swirl. Ported from the well-known Shadertoy recreation.
+const bgMat = new THREE.ShaderMaterial({
+  depthWrite: false,
+  uniforms: {
+    uTime: { value: 0 },
+    uRes: { value: new THREE.Vector2(1, 1) },
+    uImg: { value: new THREE.TextureLoader().load("bg.jpg", (t) => { t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.MirroredRepeatWrapping; }) },
+    uImgAspect: { value: 284 / 286 },
+  },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: `
+    precision highp float;
+    varying vec2 vUv;
+    uniform float uTime; uniform vec2 uRes; uniform sampler2D uImg; uniform float uImgAspect;
+    const vec4 C1 = vec4(0.871, 0.267, 0.231, 1.0);
+    const vec4 C2 = vec4(0.0, 0.42, 0.706, 1.0);
+    const vec4 C3 = vec4(0.086, 0.137, 0.145, 1.0);
+    const float CONTRAST = 3.5, LIGHTING = 0.4, SPIN_AMOUNT = 0.25, PIXEL_FILTER = 700.0, SPIN_EASE = 1.0;
+    void main(){
+      vec2 screen = vUv * uRes;
+      float pixel_size = length(uRes) / PIXEL_FILTER;
+      vec2 uv = (floor(screen / pixel_size) * pixel_size - 0.5 * uRes) / length(uRes);
+      float uv_len = length(uv);
+      float speed = -2.0 * SPIN_EASE * 0.2 + 302.2;
+      float ang = atan(uv.y, uv.x) + speed - SPIN_EASE * 20.0 * (SPIN_AMOUNT * uv_len + (1.0 - SPIN_AMOUNT));
+      vec2 mid = (uRes / length(uRes)) / 2.0;
+      uv = vec2(uv_len * cos(ang) + mid.x, uv_len * sin(ang) + mid.y) - mid;
+      uv *= 30.0;
+      speed = uTime * 7.0;
+      vec2 uv2 = vec2(uv.x + uv.y);
+      for (int i = 0; i < 5; i++) {
+        uv2 += sin(max(uv.x, uv.y)) + uv;
+        uv += 0.5 * vec2(cos(5.1123314 + 0.353 * uv2.y + speed * 0.131121), sin(uv2.x - 0.113 * speed));
+        uv -= cos(uv.x + uv.y) - sin(uv.x * 0.711 - uv.y);
+      }
+      float cm = 0.25 * CONTRAST + 0.5 * SPIN_AMOUNT + 1.2;
+      float paint = min(2.0, max(0.0, length(uv) * 0.035 * cm));
+      float c1p = max(0.0, 1.0 - cm * abs(1.0 - paint));
+      float c2p = max(0.0, 1.0 - cm * abs(paint));
+      float c3p = 1.0 - min(1.0, c1p + c2p);
+      float light = (LIGHTING - 0.2) * max(c1p * 5.0 - 4.0, 0.0) + LIGHTING * max(c2p * 5.0 - 4.0, 0.0);
+      vec4 ink = (0.3 / CONTRAST) * C1 + (1.0 - 0.3 / CONTRAST) * (C1 * c1p + C2 * c2p + vec4(c3p * C3.rgb, c3p)) + light;
+
+      // Photo, object-fit: cover, then liquefied by the swirl field and slowly drifting
+      float screenAspect = uRes.x / uRes.y;
+      vec2 iuv = vUv - 0.5;
+      if (screenAspect > uImgAspect) iuv.y *= uImgAspect / screenAspect; else iuv.x *= screenAspect / uImgAspect;
+      vec2 warp = vec2(c1p - c2p, c3p - 0.5) * 0.03 + 0.012 * vec2(sin(uTime * 0.3 + iuv.y * 5.0), cos(uTime * 0.25 + iuv.x * 5.0));
+      vec3 photo = texture2D(uImg, iuv + 0.5 + warp).rgb;
+
+      // paint tints and shades the photo so it still reads as the Balatro swirl
+      vec3 rgb = photo * (0.45 + 0.7 * ink.rgb);
+      rgb = mix(rgb, ink.rgb, 0.3) * 0.62;
+      gl_FragColor = vec4(rgb, 1.0);
+    }`,
+});
+const bg = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bgMat);
 bg.position.z = -5;
 scene.add(bg);
 
-function paintTable(pxW, pxH) {
-  const dpr = Math.min(window.devicePixelRatio, 2);
-  const tableCanvas = document.createElement("canvas"); // fresh each time: a GPU texture can't change size once uploaded
-  tableCanvas.width = Math.round(pxW * dpr); tableCanvas.height = Math.round(pxH * dpr);
-  const ctx = tableCanvas.getContext("2d");
-  ctx.setTransform(dpr * pxW / (halfW * 2), 0, 0, dpr * pxH / (halfH * 2), dpr * pxW / 2, dpr * pxH / 2); // world units, y down
-  const W = halfW * 2, H = halfH * 2;
-  const vig = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(W, H) * 0.7);
-  vig.addColorStop(0, "#161b17"); vig.addColorStop(1, "#070908");
-  ctx.fillStyle = vig; ctx.fillRect(-halfW, -halfH, W, H);
+// ponytail: no pixel post-pass — the swirl shader pixelates itself, cards stay crisp
 
-  const t = tableGeom(), cy = -t.cy; // canvas y runs down
-  const oval = (rx, ry) => { ctx.beginPath(); ctx.ellipse(0, cy, rx, ry, 0, 0, Math.PI * 2); };
-  ctx.save(); ctx.shadowColor = "rgba(0,0,0,0.7)"; ctx.shadowBlur = 40; ctx.shadowOffsetY = 12;
-  oval(t.rx + 0.32, t.ry + 0.32); ctx.fillStyle = "#3a2216"; ctx.fill(); ctx.restore();
-  const rim = ctx.createLinearGradient(0, cy - t.ry, 0, cy + t.ry);
-  rim.addColorStop(0, "#4a2b1b"); rim.addColorStop(1, "#2a170e");
-  oval(t.rx + 0.32, t.ry + 0.32); ctx.fillStyle = rim; ctx.fill();
-  const felt = ctx.createRadialGradient(0, cy - t.ry * 0.25, 0, 0, cy, Math.max(t.rx, t.ry));
-  felt.addColorStop(0, "#557a4a"); felt.addColorStop(0.7, "#3b5a35"); felt.addColorStop(1, "#2a4226");
-  oval(t.rx, t.ry); ctx.fillStyle = felt; ctx.fill();
-  oval(t.rx - 0.25, t.ry - 0.25); ctx.strokeStyle = "rgba(216,178,90,0.35)"; ctx.lineWidth = 0.035; ctx.stroke();
-  const tex = new THREE.CanvasTexture(tableCanvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  bg.material.map?.dispose();
-  bg.material.map = tex;
-  bg.material.needsUpdate = true;
-}
-
-
-// View: the stage (page minus top bar and sidebar), always at least 12 units wide and 10 tall.
-const stage = document.getElementById("stage");
+// View: always at least 12 units wide and 10 tall; layout is derived from the half-extents.
 let halfW = 6, halfH = 5, portrait = false;
 function resize() {
-  const w = stage.clientWidth || 1, h = stage.clientHeight || 1, aspect = w / h;
+  const w = window.innerWidth, h = window.innerHeight, aspect = w / h;
   portrait = aspect < 0.85;
   if (portrait) { halfW = 3.8; halfH = halfW / aspect; }
   else { halfH = Math.max(5, 6 / aspect); halfW = halfH * aspect; }
   camera.left = -halfW; camera.right = halfW; camera.top = halfH; camera.bottom = -halfH;
   camera.updateProjectionMatrix();
-  bg.scale.set(halfW, halfH, 1); // plane is 2x2, so this fills the view
-  renderer.setSize(w, h, false);
-  paintTable(w, h);
+  bg.scale.set(halfW * 2, halfH * 2, 1);
+  bgMat.uniforms.uRes.value.set(w, h);
+  renderer.setSize(w, h);
   if (latest && latest.phase !== "lobby") renderTable(latest.currentPlayerId === myId);
 }
-new ResizeObserver(resize).observe(stage);
+window.addEventListener("resize", resize);
 
 // ---------- Animated card registry ----------
 // key -> { group, target:{x,y,z,rot,scale}, phase, dying }
@@ -261,22 +291,15 @@ function spawnCard(key, card, from) {
   return entry;
 }
 
-// The oval: your hand sits inside its bottom edge, clear of the dock; the top edge leaves room for name chips.
-function handY() {
-  const unitsPerPx = (2 * halfH) / (stage.clientHeight || 1);
-  return -halfH + Math.max(portrait ? 0 : 3.1, 150 * unitsPerPx + CARD_H / 2);
-}
-function tableGeom() {
-  const bottom = handY() - CARD_H / 2 - 0.4, top = halfH - (portrait ? 1.2 : 1.0);
-  return { cy: (top + bottom) / 2, rx: halfW - (portrait ? 0.35 : 0.9), ry: (top - bottom) / 2 };
-}
-function centreY() { const t = tableGeom(); return t.cy + (portrait ? -0.12 : 0.08) * t.ry; }
-function deckPos() { return { x: -1.1, y: centreY() }; }
-function discardPos() { return { x: 1.1, y: centreY() }; }
+// Portrait rows are fractions of the view height so phones and tablets both space out evenly.
+function centreY() { return portrait ? halfH - 0.44 * (2 * halfH) : 0.85; }
+function deckPos() { return { x: -1.25, y: centreY() }; }
+function discardPos() { return { x: 1.25, y: centreY() }; }
 
 function animate() {
   requestAnimationFrame(animate);
   const t = clock.getElapsedTime();
+  bgMat.uniforms.uTime.value = t;
 
   for (const [key, e] of cards) {
     const g = e.group, tg = e.target;
@@ -313,16 +336,7 @@ function animate() {
 // ---------- HTML labels pinned to world positions ----------
 const labelLayer = document.getElementById("labels");
 const labels = new Map(); // key -> { el, x, y }
-// Name chip: initial avatar, name, and a small mono line underneath.
-function fillChip(el, name, sub) {
-  if (el.dataset.name === name && el.dataset.sub === sub) return;
-  el.dataset.name = name; el.dataset.sub = sub;
-  el.innerHTML = '<span class="avatar"></span><span class="chip-text"><span class="chip-name"></span><span class="chip-sub"></span></span>';
-  el.querySelector(".avatar").textContent = (name.trim()[0] || "?").toUpperCase();
-  el.querySelector(".chip-name").textContent = name;
-  el.querySelector(".chip-sub").textContent = sub;
-}
-function label(key, name, sub, x, y, className = "", onClick = null) {
+function label(key, text, x, y, className = "", onClick = null) {
   let l = labels.get(key);
   if (!l) {
     const el = document.createElement("div");
@@ -332,7 +346,7 @@ function label(key, name, sub, x, y, className = "", onClick = null) {
     labels.set(key, l);
   }
   l.x = x; l.y = y; l.alive = true;
-  fillChip(l.el, name, sub);
+  if (l.el.textContent !== text) l.el.textContent = text;
   l.el.className = "world-label " + className;
   l.el.onclick = onClick;
   l.el.style.pointerEvents = onClick ? "auto" : "none";
@@ -340,7 +354,7 @@ function label(key, name, sub, x, y, className = "", onClick = null) {
 }
 const projV = new THREE.Vector3();
 function syncLabels() {
-  const w = stage.clientWidth, h = stage.clientHeight;
+  const w = window.innerWidth, h = window.innerHeight;
   for (const l of labels.values()) {
     projV.set(l.x, l.y, 0).project(camera);
     const sx = (projV.x + 1) / 2 * w, sy = (1 - projV.y) / 2 * h;
@@ -364,13 +378,11 @@ let myName = "";
 const $ = (id) => document.getElementById(id);
 
 // Remember the seat so a dropped connection (phone sleep, refresh) can rejoin by itself
-let autoJoining = false;
 const saved = (() => { try { return JSON.parse(localStorage.getItem("seat")); } catch { return null; } })();
 ws.addEventListener("open", () => {
   $("setup-error").textContent = "";
   if (saved && !new URLSearchParams(location.search).get("code")) {
     myName = saved.name;
-    autoJoining = true;
     send({ type: "join", code: saved.code, name: saved.name });
   }
 });
@@ -389,7 +401,6 @@ ws.addEventListener("message", (evt) => {
   }
   if (msg.type === "error") {
     if (!myId) try { localStorage.removeItem("seat"); } catch {} // stale seat: room gone or already full
-    if (autoJoining && !myId) { autoJoining = false; return; } // silent: the player didn't ask to join
     $("setup-error").textContent = msg.message;
     return;
   }
@@ -421,8 +432,7 @@ function showWaitingRoom(code) {
   $("setup-screen").classList.add("hidden");
   $("waiting-screen").classList.remove("hidden");
   $("room-code-display").textContent = code;
-  $("topbar-code").textContent = code;
-  document.body.classList.add("in-room");
+  $("chat").classList.remove("hidden");
 }
 
 function inviteLink(code) {
@@ -443,18 +453,12 @@ $("room-code-display").addEventListener("click", async () => {
   const btn = $("room-code-display");
   try { await navigator.clipboard.writeText(btn.textContent); flashCopied(btn, "Copied!"); } catch {}
 });
-function copyInvite() {
-  const code = $("room-code-display").textContent;
-  return navigator.clipboard.writeText(`Join my Ben 10 game! Room code: ${code}\n${inviteLink(code)}`);
-}
 $("copy-link-btn").addEventListener("click", async () => {
-  try { await copyInvite(); flashCopied($("copy-link-btn"), "Link copied!"); } catch {}
-});
-$("topbar-copy").addEventListener("click", async () => {
+  const btn = $("copy-link-btn");
   try {
-    await copyInvite();
-    $("topbar-copied").classList.remove("hidden");
-    setTimeout(() => $("topbar-copied").classList.add("hidden"), 1400);
+    const code = $("room-code-display").textContent;
+    await navigator.clipboard.writeText(`Join my Ben 10 game! Room code: ${code}\n${inviteLink(code)}`);
+    flashCopied(btn, "Link copied!");
   } catch {}
 });
 
@@ -469,22 +473,16 @@ function renderLog() {
   if (key === renderedLogKey) return;
   const prevLen = renderedLogKey ? parseInt(renderedLogKey, 10) : latest.log.length;
   renderedLogKey = key;
-  // Game events: just the last few, newest brightest. Chat gets the rest of the sidebar.
-  const events = $("events");
-  events.innerHTML = "";
-  for (const m of latest.log.filter((m) => typeof m === "string").slice(-3)) {
-    const d = document.createElement("div");
-    d.textContent = m;
-    events.appendChild(d);
-  }
   const el = $("log");
   el.innerHTML = "";
-  for (const m of latest.log.filter((m) => m && m.chat)) {
+  for (const m of latest.log) {
     const d = document.createElement("div");
-    d.className = "chat-line" + (m.from === myName ? " me" : "");
-    const b = document.createElement("b");
-    b.textContent = m.from === myName ? "You" : m.from;
-    d.append(b, m.text);
+    if (m && m.chat) {
+      d.className = "chat-line" + (m.from === myName ? " me" : "");
+      const b = document.createElement("b");
+      b.textContent = m.from + ": ";
+      d.append(b, m.text);
+    } else d.textContent = m;
     el.appendChild(d);
   }
   el.scrollTop = el.scrollHeight;
@@ -512,39 +510,8 @@ $("restart-btn").addEventListener("click", () => location.reload());
 // ---------- Render ----------
 let renderedPlayerCount = -1;
 
-function renderSidePlayers() {
-  const box = $("side-players");
-  box.innerHTML = "";
-  for (const p of latest.players) {
-    const row = document.createElement("div");
-    const current = p.id === latest.currentPlayerId && latest.phase !== "lobby" && latest.phase !== "over";
-    row.className = "side-row" + (p.id === myId ? " me" : "") + (current ? " current" : "");
-    const caret = document.createElement("span");
-    caret.className = "caret";
-    caret.textContent = current ? "\u25B6" : "";
-    const name = document.createElement("span");
-    name.textContent = p.name;
-    row.append(caret, name);
-    const tag = p.id === myId ? "you" : p.isBot ? "bot" : !p.connected ? "away" : "";
-    if (tag) {
-      const t = document.createElement("span");
-      t.className = "tag" + (tag === "away" ? " away" : "");
-      t.textContent = tag;
-      row.append(t);
-    }
-    if (latest.phase !== "lobby") {
-      const c = document.createElement("span");
-      c.className = "count";
-      c.textContent = p.count;
-      row.append(c);
-    }
-    box.appendChild(row);
-  }
-}
-
 function render() {
   if (!latest) return;
-  renderSidePlayers();
   if (latest.phase === "lobby") { renderLobby(); renderLog(); return; }
 
   $("waiting-screen").classList.add("hidden");
@@ -555,7 +522,7 @@ function render() {
   const isMyTurn = latest.currentPlayerId === myId;
   const current = latest.players.find((p) => p.id === latest.currentPlayerId);
   const ti = $("turn-indicator");
-  ti.textContent = latest.phase === "over" ? "Game over" : isMyTurn ? "Your turn" : `${current ? current.name : "Someone"} is up...`;
+  ti.textContent = latest.phase === "over" ? "Game over" : isMyTurn ? "Your turn" : `${current ? current.name : "…"}'s turn`;
   ti.classList.toggle("mine", isMyTurn && latest.phase !== "over");
   tickTimer();
 
@@ -575,7 +542,7 @@ function render() {
 
   if (latest.phase === "over" && $("win-screen").classList.contains("hidden")) {
     const winner = latest.players.find((p) => p.id === latest.winnerId);
-    $("win-title").textContent = "Ben Ten!";
+    $("win-title").textContent = "BEN TEN!";
     $("win-subtitle").textContent = winner
       ? (winner.id === myId ? "You win! Your hand totals exactly 10." : `${winner.name} wins with exactly 10.`)
       : "";
@@ -587,16 +554,13 @@ function render() {
 
 // ---------- Turn timer + YOUR TURN shout ----------
 let turnDeadline = null;
-const TURN_MS = 20000; // matches the server
 function tickTimer() {
   const el = $("turn-timer");
   const secs = turnDeadline == null || !latest || latest.phase === "over" ? null : Math.ceil((turnDeadline - performance.now()) / 1000);
   el.classList.toggle("hidden", secs == null);
   if (secs == null) return;
-  el.textContent = `${Math.max(0, secs)}s`;
+  el.textContent = Math.max(0, secs);
   el.classList.toggle("low", secs <= 5);
-  const pct = Math.max(0, Math.min(1, (turnDeadline - performance.now()) / TURN_MS));
-  for (const a of document.querySelectorAll(".active")) a.style.setProperty("--pct", pct.toFixed(3));
 }
 setInterval(tickTimer, 250);
 
@@ -605,24 +569,8 @@ let audio = null;
 addEventListener("pointerdown", () => {
   try { audio = audio || new AudioContext(); audio.resume(); } catch {}
 }, { once: true });
-// Sound toggle in the top bar; remembered per browser.
-let muted = false;
-try { muted = localStorage.getItem("muted") === "1"; } catch {}
-const SOUND_ON = '<svg viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>';
-const SOUND_OFF = '<svg viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/></svg>';
-function paintSoundBtn() {
-  $("sound-btn").innerHTML = muted ? SOUND_OFF : SOUND_ON;
-  $("sound-btn").setAttribute("aria-label", muted ? "Sound off" : "Sound on");
-}
-$("sound-btn").addEventListener("click", () => {
-  muted = !muted;
-  try { localStorage.setItem("muted", muted ? "1" : "0"); } catch {}
-  paintSoundBtn();
-});
-paintSoundBtn();
-
 function beep() {
-  if (!audio || muted) return;
+  if (!audio) return;
   const t = audio.currentTime;
   [523, 659, 784, 1047].forEach((f, i) => { // quick rising arpeggio
     const o = audio.createOscillator(), g = audio.createGain();
@@ -666,10 +614,10 @@ async function startConfetti() {
   const face = await pixelFace;
   const c = $("confetti");
   const ctx = c.getContext("2d");
-  const colors = ["#d8b25a", "#d9705f", "#7fa9c9", "#8fbf86", "#ecebe4"];
+  const colors = ["#ffcd3c", "#ff5d5d", "#4fb4ff", "#4be08a", "#ff8f2b", "#fdf6e8"];
   const bits = Array.from({ length: 200 }, (_, i) => ({
     face: i % 4 === 0, // every fourth piece is a falling pixel face
-    x: Math.random() * stage.clientWidth, y: -40 - Math.random() * stage.clientHeight,
+    x: Math.random() * innerWidth, y: -40 - Math.random() * innerHeight,
     vx: (Math.random() - 0.5) * 1.5, vy: 2 + Math.random() * 3,
     w: 6 + Math.random() * 6, h: 8 + Math.random() * 8,
     size: 34 + Math.random() * 30,
@@ -678,10 +626,10 @@ async function startConfetti() {
   }));
   let frames = 0;
   function tick() {
-    c.width = stage.clientWidth; c.height = stage.clientHeight;
+    c.width = innerWidth; c.height = innerHeight;
     for (const b of bits) {
       b.x += b.vx + Math.sin(frames / 20 + b.y / 50) * 0.6; b.y += b.vy; b.rot += b.vr;
-      if (b.y > c.height + 40 && frames < 420) { b.y = -40; b.x = Math.random() * c.width; }
+      if (b.y > innerHeight + 40 && frames < 420) { b.y = -40; b.x = Math.random() * innerWidth; }
       ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.rot);
       if (b.face) ctx.drawImage(face, -b.size / 2, -b.size / 2, b.size, b.size);
       else { ctx.fillStyle = b.color; ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h); }
@@ -752,7 +700,9 @@ function renderTable(isMyTurn) {
 
   // --- my hand ---
   const hand = latest.you.hand;
-  const hy = handY();
+  // portrait: sit the hand in the bottom quarter, but never closer than ~185px to the edge (room for the dock)
+  const unitsPerPx = (2 * halfH) / window.innerHeight;
+  const handY = -halfH + (portrait ? Math.max(0.24 * (2 * halfH), 185 * unitsPerPx + CARD_H / 2) : 3.35);
   const spacing = Math.min(1.65, (halfW * 2 - 1.2 - CARD_W) / Math.max(hand.length - 1, 1));
   const startX = -((hand.length - 1) * spacing) / 2;
   hand.forEach((card, i) => {
@@ -760,13 +710,11 @@ function renderTable(isMyTurn) {
     let e = cards.get(key) || spawnCard(key, card, spawnFrom);
     e.dying = false; e.wobble = true;
     e.tag = { myCard: true, cardId: card.id };
-    e.target = { x: startX + i * spacing, y: hy, z: 0.1 + i * 0.01, rot: (i - (hand.length - 1) / 2) * -0.03, scale: 1 };
+    e.target = { x: startX + i * spacing, y: handY, z: 0.1 + i * 0.01, rot: (i - (hand.length - 1) / 2) * -0.03, scale: 1 };
     seen.add(key);
   });
   const total = hand.reduce((s, c) => s + cardValue(c), 0);
-  const meChip = $("me-chip");
-  fillChip(meChip, myName || "You", `total ${total}`);
-  meChip.className = "chip" + (total === 10 ? " gold" : "") + (isMyTurn ? " active" : "");
+  label("me", `${myName || "You"} · ${total}`, 0, handY - CARD_H / 2 - 0.5, total === 10 ? "gold" : "");
 
   // --- opponents ---
   opps.forEach((p, idx) => {
@@ -783,7 +731,7 @@ function renderTable(isMyTurn) {
     }
     const active = p.id === latest.currentPlayerId && latest.phase !== "over";
     const clickable = isMyTurn && (latest.phase === "extra" || latest.phase === "draw");
-    label(`opp:${p.id}`, p.name, p.connected ? `${n} card${n === 1 ? "" : "s"}` : "away", pos.x, pos.y + CARD_H * s / 2 + 0.55,
+    label(`opp:${p.id}`, p.name + (p.connected ? "" : " (away)") + ` · ${n}`, pos.x, pos.y + CARD_H * s / 2 + 0.5,
       (active ? "active " : "") + (clickable ? "clickable" : ""),
       clickable ? () => onOpponentClick(p.id) : null);
   });
@@ -820,13 +768,11 @@ function renderTable(isMyTurn) {
   endLabels();
 }
 
-// Opponents sit round the top of the oval, left to right, just inside the rim.
 function oppPos(idx, n) {
-  const t = tableGeom();
-  const [from, to] = n > 3 ? [172, 8] : [155, 25]; // big tables wrap down the sides
-  const deg = n === 1 ? 90 : from - (idx * (from - to)) / (n - 1);
-  const a = (deg * Math.PI) / 180;
-  return { x: Math.cos(a) * t.rx * (portrait ? 0.78 : 0.72), y: t.cy + Math.sin(a) * t.ry * 0.68 };
+  const y = portrait ? halfH - 0.2 * (2 * halfH) : halfH - 2.1;
+  const span = Math.min(halfW * 2 - (portrait ? 2.2 : 3.2), 3.2 * (n - 1));
+  const x = n === 1 ? 0 : -span / 2 + (span / (n - 1)) * idx;
+  return { x, y };
 }
 
 // ---------- Actions ----------
@@ -898,9 +844,8 @@ const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 
 function entryAt(clientX, clientY) {
-  const r = canvas.getBoundingClientRect();
-  ndc.x = ((clientX - r.left) / r.width) * 2 - 1;
-  ndc.y = -((clientY - r.top) / r.height) * 2 + 1;
+  ndc.x = (clientX / window.innerWidth) * 2 - 1;
+  ndc.y = -(clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(ndc, camera);
   pointerWorld.set(ndc.x * halfW, ndc.y * halfH);
   const hits = raycaster.intersectObjects(cardLayer.children, true);
@@ -947,14 +892,13 @@ canvas.addEventListener("click", (ev) => {
 });
 
 // ---------- Chat ----------
+const chatEl = $("chat");
 let unread = 0;
-// Sidebar is always visible on wide screens; on narrow ones it's a drawer.
-function chatCollapsed() { return getComputedStyle($("sidebar-toggle")).display !== "none" && !document.body.classList.contains("side-open"); }
-$("sidebar-toggle").addEventListener("click", () => {
-  document.body.classList.toggle("side-open");
+function chatCollapsed() { return getComputedStyle($("chat-panel")).display === "none"; }
+$("chat-toggle").addEventListener("click", () => {
+  chatEl.classList.toggle("open");
   if (!chatCollapsed()) { unread = 0; $("chat-unread").classList.add("hidden"); $("log").scrollTop = $("log").scrollHeight; }
 });
-stage.addEventListener("pointerdown", () => document.body.classList.remove("side-open"));
 $("chat-form").addEventListener("submit", (ev) => {
   ev.preventDefault();
   const input = $("chat-input");

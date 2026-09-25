@@ -377,17 +377,33 @@ let myName = "";
 
 const $ = (id) => document.getElementById(id);
 
-ws.addEventListener("open", () => { $("setup-error").textContent = ""; });
-ws.addEventListener("close", () => { $("setup-error").textContent = "Disconnected from server. Refresh to try again."; });
+// Remember the seat so a dropped connection (phone sleep, refresh) can rejoin by itself
+const saved = (() => { try { return JSON.parse(localStorage.getItem("seat")); } catch { return null; } })();
+ws.addEventListener("open", () => {
+  $("setup-error").textContent = "";
+  if (saved && !new URLSearchParams(location.search).get("code")) {
+    myName = saved.name;
+    send({ type: "join", code: saved.code, name: saved.name });
+  }
+});
+ws.addEventListener("close", () => {
+  $("setup-error").textContent = "Disconnected, reconnecting...";
+  if (myId) setTimeout(() => location.reload(), 2000);
+});
 
 ws.addEventListener("message", (evt) => {
   const msg = JSON.parse(evt.data);
   if (msg.type === "created" || msg.type === "joined") {
     myId = msg.playerId;
+    try { localStorage.setItem("seat", JSON.stringify({ code: msg.code, name: myName })); } catch {}
     showWaitingRoom(msg.code);
     return;
   }
-  if (msg.type === "error") { $("setup-error").textContent = msg.message; return; }
+  if (msg.type === "error") {
+    if (!myId) try { localStorage.removeItem("seat"); } catch {} // stale seat: room gone or already full
+    $("setup-error").textContent = msg.message;
+    return;
+  }
   if (msg.type === "state") {
     prev = latest;
     latest = msg;

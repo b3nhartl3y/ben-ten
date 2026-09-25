@@ -141,7 +141,7 @@ function beginTurn(room, index) {
   room.phase = "discard";
   broadcast(room);
 
-  if (p.isBot) setTimeout(() => runBotTurn(room, index), 900);
+  if (p.isBot || !p.connected) setTimeout(() => runBotTurn(room, index), 900); // disconnected players autoplay until they rejoin
 }
 
 function finishTurnAndAdvance(room, index) {
@@ -312,9 +312,21 @@ function handleMessage(ws, msg) {
   if (msg.type === "join") {
     const room = rooms.get((msg.code || "").toUpperCase());
     if (!room) return sendError(ws, "No game with that code.");
+    const name = (msg.name || "Player").slice(0, 20);
+    // ponytail: seat is reclaimed by name, so anyone typing a dropped player's name gets it; add a per-seat token if that matters
+    const seat = room.phase !== "over" && room.players.find((x) => !x.isBot && !x.connected && x.name.toLowerCase() === name.toLowerCase());
+    if (seat) {
+      ws.playerId = seat.id;
+      seat.ws = ws;
+      seat.connected = true;
+      ws.roomCode = room.code;
+      ws.send(JSON.stringify({ type: "joined", code: room.code, playerId: seat.id }));
+      log(room, `${seat.name} rejoined.`);
+      broadcast(room);
+      return;
+    }
     if (room.phase !== "lobby") return sendError(ws, "That game has already started.");
     if (room.players.length >= 6) return sendError(ws, "That game is full.");
-    const name = (msg.name || "Player").slice(0, 20);
     room.players.push({ id: ws.playerId, name, hand: [], isBot: false, connected: true, ws });
     ws.roomCode = room.code;
     ws.send(JSON.stringify({ type: "joined", code: room.code, playerId: ws.playerId }));

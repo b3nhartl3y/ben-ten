@@ -120,6 +120,7 @@ function broadcast(room) {
       log: room.log.slice(-40),
       winnerId: room.winnerId,
       announce: room.announce || null,
+      turnMsLeft: room.turnEndsAt ? Math.max(0, room.turnEndsAt - Date.now()) : null, // relative, so client clock skew doesn't matter
       winnerHand: room.phase === "over" ? (room.players.find((x) => x.id === room.winnerId) || {}).hand || null : null,
     };
     p.ws.send(JSON.stringify(payload));
@@ -131,9 +132,17 @@ function sendError(ws, message) {
 }
 
 // ---------- Turn flow ----------
+const TURN_MS = 20000;
+
 function beginTurn(room, index) {
   room.currentPlayer = index;
   const p = room.players[index];
+  clearTimeout(room.turnTimer);
+  room.turnEndsAt = null;
+  if (!p.isBot && p.connected) {
+    room.turnEndsAt = Date.now() + TURN_MS;
+    room.turnTimer = setTimeout(() => timeOutTurn(room, index), TURN_MS);
+  }
 
   while (p.hand.length < room.handSize && room.drawPile.length) p.hand.push(room.drawPile.pop());
   if (room.drawPile.length === 0) refillDrawPile(room);
@@ -144,8 +153,21 @@ function beginTurn(room, index) {
   if (p.isBot || !p.connected) setTimeout(() => runBotTurn(room, index), 900); // disconnected players autoplay until they rejoin
 }
 
+// Out of time: finish whatever step the player is on for them.
+function timeOutTurn(room, index) {
+  if (room.currentPlayer !== index || !["discard", "extra", "draw"].includes(room.phase)) return;
+  const p = room.players[index];
+  log(room, `${p.name} ran out of time.`);
+  if (room.phase === "discard") return runBotTurn(room, index);
+  if (room.drawPile.length === 0) refillDrawPile(room);
+  if (room.drawPile.length) p.hand.push(room.drawPile.pop());
+  finishTurnAndAdvance(room, index);
+}
+
 function finishTurnAndAdvance(room, index) {
   const p = room.players[index];
+  clearTimeout(room.turnTimer);
+  room.turnEndsAt = null;
   if (handTotal(p.hand) === 10) {
     room.phase = "over";
     room.winnerId = p.id;

@@ -407,6 +407,7 @@ ws.addEventListener("message", (evt) => {
   if (msg.type === "state") {
     prev = latest;
     latest = msg;
+    turnDeadline = msg.turnMsLeft == null ? null : performance.now() + msg.turnMsLeft;
     render();
   }
 });
@@ -523,6 +524,10 @@ function render() {
   const ti = $("turn-indicator");
   ti.textContent = latest.phase === "over" ? "Game over" : isMyTurn ? "Your turn" : `${current ? current.name : "…"}'s turn`;
   ti.classList.toggle("mine", isMyTurn && latest.phase !== "over");
+  tickTimer();
+
+  const wasMyTurn = prev && prev.currentPlayerId === myId && prev.phase !== "lobby";
+  if (isMyTurn && latest.phase === "discard" && !wasMyTurn) shoutYourTurn();
 
   renderAnnounce();
   renderTable(isMyTurn);
@@ -545,6 +550,48 @@ function render() {
     $("win-screen").classList.remove("hidden");
     startConfetti();
   }
+}
+
+// ---------- Turn timer + YOUR TURN shout ----------
+let turnDeadline = null;
+function tickTimer() {
+  const el = $("turn-timer");
+  const secs = turnDeadline == null || !latest || latest.phase === "over" ? null : Math.ceil((turnDeadline - performance.now()) / 1000);
+  el.classList.toggle("hidden", secs == null);
+  if (secs == null) return;
+  el.textContent = Math.max(0, secs);
+  el.classList.toggle("low", secs <= 5);
+}
+setInterval(tickTimer, 250);
+
+let audio = null;
+// Browsers only allow sound after a tap, so unlock on the first one.
+addEventListener("pointerdown", () => {
+  try { audio = audio || new AudioContext(); audio.resume(); } catch {}
+}, { once: true });
+function beep() {
+  if (!audio) return;
+  const t = audio.currentTime;
+  [523, 659, 784, 1047].forEach((f, i) => { // quick rising arpeggio
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = "square";
+    o.frequency.value = f;
+    g.gain.setValueAtTime(0.12, t + i * 0.09);
+    g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.09 + 0.18);
+    o.connect(g).connect(audio.destination);
+    o.start(t + i * 0.09);
+    o.stop(t + i * 0.09 + 0.2);
+  });
+}
+let shoutTimer = null;
+function shoutYourTurn() {
+  const el = $("your-turn");
+  el.classList.remove("hidden");
+  el.style.animation = "none"; void el.offsetWidth; el.style.animation = ""; // restart
+  clearTimeout(shoutTimer);
+  shoutTimer = setTimeout(() => el.classList.add("hidden"), 1400);
+  beep();
+  navigator.vibrate?.(200);
 }
 
 // ---------- Announcement banner ----------

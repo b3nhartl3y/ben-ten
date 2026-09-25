@@ -439,7 +439,8 @@ $("room-code-display").addEventListener("click", async () => {
 $("copy-link-btn").addEventListener("click", async () => {
   const btn = $("copy-link-btn");
   try {
-    await navigator.clipboard.writeText(inviteLink($("room-code-display").textContent));
+    const code = $("room-code-display").textContent;
+    await navigator.clipboard.writeText(`Join my Ben 10 game! Room code: ${code}\n${inviteLink(code)}`);
     flashCopied(btn, "Link copied!");
   } catch {}
 });

@@ -359,9 +359,9 @@ html, body {
   color: var(--gold-ink);
   border: 3px solid var(--outline);
   border-radius: 14px;
-  font-family: var(--pixel);
+  font-family: "Fredoka", sans-serif; /* digits must be unambiguous here */
   font-weight: 700;
-  font-size: clamp(1.1em, 3.6vw, 1.6em);
+  font-size: clamp(1.25em, 4.2vw, 1.8em);
   text-align: center;
   white-space: nowrap;
   box-shadow: 0 6px 0 var(--outline);

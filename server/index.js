@@ -208,6 +208,7 @@ const TAUNTS = {
   gloat: ["Thanks for the card, {n}.", "I'll take that, {n}."],
 };
 function taunt(room, bot, kind, target) {
+  if (!bot.isBot) return; // autoplayed humans (timed out / away) don't talk
   const lines = TAUNTS[kind];
   const text = lines[Math.floor(Math.random() * lines.length)].replace("{n}", target.name);
   log(room, { chat: true, from: bot.name, text });

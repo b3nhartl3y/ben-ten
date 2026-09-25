@@ -226,19 +226,19 @@ html, body {
 .error-text { color: var(--red); min-height: 1.2em; margin-top: 14px; font-size: 0.9em; font-weight: 600; }
 
 .room-code {
-  font-family: var(--pixel);
-  font-size: 3em;
+  font-family: "Fredoka", sans-serif; /* pixel font makes codes ambiguous */
+  font-size: 2.6em;
   font-weight: 700;
-  letter-spacing: 10px;
-  color: var(--gold);
-  text-shadow: 4px 4px 0 var(--outline);
-  margin: 10px 0 20px;
-  background: none;
-  border: none;
+  letter-spacing: 8px;
+  color: var(--gold-ink);
+  background: var(--gold);
+  border: 3px solid var(--outline);
+  border-radius: 14px;
+  box-shadow: 0 5px 0 var(--gold-dark);
   cursor: pointer;
-  padding: 0;
+  padding: 6px 12px 6px 20px; /* extra left offsets trailing letter-spacing */
+  margin: 10px auto 20px;
   display: block;
-  width: 100%;
 }
 .room-code:active { transform: translateY(2px); }
 #copy-link-btn { width: auto; margin: 0 auto 20px; padding: 10px 20px; }
